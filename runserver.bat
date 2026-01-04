@@ -19,6 +19,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Set npm to use China mirror
+echo Setting npm to use China mirror...
+call npm config set registry https://registry.npmmirror.com
+
 REM Frontend Build
 echo [1/2] Checking Frontend...
 if exist dist (
