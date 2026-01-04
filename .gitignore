@@ -24,5 +24,4 @@ dist-ssr
 *.sw?
 data/ebu.db
 bun.lock
-package-lock.json
 .env
