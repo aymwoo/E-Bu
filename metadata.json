@@ -1,0 +1,7 @@
+{
+  "name": "E-Bu - AI加持的错题集服务",
+  "description": "基于 AI 的智能错题管理系统，支持拍照识别、知识点自动归类、解析生成及智能组卷测试。",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}

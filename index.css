@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@theme {
+  --font-family-sans: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* Custom styles */
+body {
+  font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+/* 解决 LaTeX 公式垂直对齐问题 */
+.katex {
+  font-size: 1.05em;
+  line-height: 1;
+  text-indent: 0;
+}
+
+.katex-display {
+  margin: 0.8em 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+}
+
+/* 隐藏滚动条但保留功能 */
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 练习册背景网格 */
+.workbook-grid {
+  background-image: radial-gradient(#e5e7eb 1px, transparent 0);
+  background-size: 20px 20px;
+}
+
+/* 修复行内公式间距 */
+.latex-container .katex {
+  padding: 0 0.1em;
+  vertical-align: middle;
+}
+
+/* 模拟纸张阴影 */
+.paper-shadow {
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+}
+
+/* 打印样式优化 */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background: white;
+    margin: 0;
+    padding: 0;
+  }
+
+  .prose {
+    max-width: none;
+    color: black;
+  }
+
+  /* 强制分页 */
+  .page-break {
+    page-break-before: always;
+  }
+
+  /* 装订线样式 */
+  .binding-line {
+    position: fixed;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 40px;
+    border-right: 1px dashed #ccc;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding-top: 50px;
+    gap: 120px;
+    z-index: 100;
+    background: white;
+  }
+
+  .punch-hole {
+    width: 12px;
+    height: 12px;
+    border: 1px solid #ddd;
+    border-radius: 50%;
+    background: white;
+  }
+
+  .print-container {
+    margin-left: 40px !important;
+    padding: 0 !important;
+    width: calc(100% - 40px) !important;
+  }
+
+  /* 练习册分栏打印 */
+  .workbook-row {
+    display: flex !important;
+    min-height: 300px;
+    border-bottom: 1px solid #eee;
+    page-break-inside: avoid;
+  }
+
+  .workbook-question {
+    width: 50% !important;
+    border-right: 1px solid #eee;
+    padding: 1.5rem !important;
+  }
+
+  .workbook-space {
+    width: 50% !important;
+    padding: 1.5rem !important;
+    background-image: radial-gradient(#e5e7eb 0.5px, transparent 0) !important;
+    background-size: 15px 15px !important;
+  }
+}
