@@ -94,6 +94,18 @@ body {
     background: white;
   }
 
+  .binding-line > div:last-child {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-90deg);
+    font-size: 10px;
+    color: #cbd5e1;
+    font-weight: bold;
+    letter-spacing: 1em;
+    white-space: nowrap;
+  }
+
   .punch-hole {
     width: 12px;
     height: 12px;

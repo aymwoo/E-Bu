@@ -15,9 +15,7 @@ const BindingLine = () => (
     <div className="punch-hole"></div>
     <div className="punch-hole"></div>
     <div className="punch-hole"></div>
-    <div className="absolute top-1/2 left-2 -translate-y-1/2 -rotate-90 text-[10px] text-slate-300 font-bold tracking-[1em] whitespace-nowrap">
-      装 订 线 内 请 勿 答 题
-    </div>
+    <div>装 订 线 内 请 勿 答 题</div>
   </div>
 );
 
