@@ -87,9 +87,18 @@ func main() {
 			})
 		})
 	} else {
-		r.Static("/static", staticDir)
+		// Serve assets directory for JS/CSS files
+		r.Static("/assets", filepath.Join(staticDir, "assets"))
+		// Serve other static files from root
+		r.StaticFile("/gitee.ico", filepath.Join(staticDir, "gitee.ico"))
+		r.StaticFile("/screenshot.png", filepath.Join(staticDir, "screenshot.png"))
+		// Serve index.html for root path
+		r.GET("/", func(c *gin.Context) {
+			c.File(filepath.Join(staticDir, "index.html"))
+		})
+		// Fallback to index.html for SPA routing
 		r.NoRoute(func(c *gin.Context) {
-			c.File(staticDir + "/index.html")
+			c.File(filepath.Join(staticDir, "index.html"))
 		})
 	}
 

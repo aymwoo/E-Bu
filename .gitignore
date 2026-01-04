@@ -25,3 +25,4 @@ dist-ssr
 data/ebu.db
 bun.lock
 .env
+backend/main.exe
