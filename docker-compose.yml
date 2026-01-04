@@ -16,33 +16,20 @@ services:
     networks:
       - ebu-network
 
-  # Frontend service (React app) - build stage
-  frontend-build:
+  # Frontend service (Builds and Serves React app with Nginx)
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend.build
-    volumes:
-      - frontend_build:/app/build
-    networks:
-      - ebu-network
-
-  # Nginx to serve the frontend and proxy API requests
-  nginx:
-    image: nginx:alpine
     ports:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - frontend_build:/usr/share/nginx/html:ro
     depends_on:
       - backend
-      - frontend-build
     networks:
       - ebu-network
     restart: unless-stopped
-
-volumes:
-  frontend_build:
 
 networks:
   ebu-network:
