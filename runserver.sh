@@ -44,6 +44,11 @@ export DB_PATH="../data/ebu.db"
 export STATIC_DIR="../dist"
 export PORT=8080
 export GIN_MODE=release
+export CGO_ENABLED=1
+export GOPROXY=https://goproxy.cn,direct
+
+echo "Downloading Go dependencies..."
+go mod download
 
 echo "Server starting at http://localhost:8080"
 echo "Press Ctrl+C to stop."
