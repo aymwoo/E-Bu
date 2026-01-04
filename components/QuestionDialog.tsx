@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Question, Subject } from '../types';
 import LaTeXRenderer from './LaTeXRenderer';
 import ImageCropper from './ImageCropper';
+import QuestionEditDialog from './QuestionEditDialog';
 import { apiService } from '../services/apiService';
 
 interface QuestionDialogProps {
@@ -19,6 +20,7 @@ const QuestionDialog: React.FC<QuestionDialogProps> = ({
   onUpdateField
 }) => {
   const [isCropping, setIsCropping] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
   const handleCropComplete = async (croppedBase64: string) => {
@@ -131,6 +133,16 @@ const QuestionDialog: React.FC<QuestionDialogProps> = ({
             <section>
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">题目详情内容</h3>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="text-xs font-bold text-indigo-600 hover:text-indigo-700 flex items-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-lg transition-colors border border-indigo-100 shadow-sm"
+                  title="编辑题目/选项"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  编辑
+                </button>
               </div>
               <div className="bg-slate-50 p-8 rounded-3xl border border-slate-100 group relative">
                 <LaTeXRenderer content={question.content} className="text-lg leading-relaxed text-slate-800" />
@@ -295,6 +307,20 @@ const QuestionDialog: React.FC<QuestionDialogProps> = ({
           imageSrc={question.image}
           onCropComplete={handleCropComplete}
           onCancel={() => setIsCropping(false)}
+        />
+      )}
+
+      {isEditing && (
+        <QuestionEditDialog
+          question={question}
+          onClose={() => setIsEditing(false)}
+          onSaved={(updated) => {
+            onUpdateField?.(question.id, 'content', updated.content);
+            onUpdateField?.(question.id, 'options', updated.options || []);
+            onUpdateField?.(question.id, 'answer', updated.answer);
+            onUpdateField?.(question.id, 'analysis', updated.analysis);
+            onUpdateField?.(question.id, 'learningGuide', updated.learningGuide);
+          }}
         />
       )}
 

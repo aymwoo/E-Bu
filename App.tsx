@@ -5,13 +5,13 @@ import { apiService } from './services/apiService';
 import QuestionCard from './components/QuestionCard';
 import QuestionListItem from './components/QuestionListItem';
 import QuestionDialog from './components/QuestionDialog';
+import QuestionEditDialog from './components/QuestionEditDialog';
 import CaptureQuestion from './components/CaptureQuestion';
 import TestGenerator from './components/TestGenerator';
 import WorkbookGenerator from './components/WorkbookGenerator';
 import HelpCenter from './components/HelpCenter';
 import SettingsDialog from './components/SettingsDialog';
 
-type ViewMode = 'CARD' | 'LIST';
 type MainTab = 'LIBRARY' | 'TRASH';
 
 const App: React.FC = () => {
@@ -21,13 +21,14 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedSubject, setSelectedSubject] = useState<Subject | 'ALL'>('ALL');
   const [activeQuestion, setActiveQuestion] = useState<Question | null>(null);
+  const [editingQuestion, setEditingQuestion] = useState<Question | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
   const [isGeneratingWorkbook, setIsGeneratingWorkbook] = useState(false);
   const [isShowingHelp, setIsShowingHelp] = useState(false);
   const [isShowingSettings, setIsShowingSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('CARD');
+  const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('CARD');
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -349,6 +350,35 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center bg-white border border-slate-200 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setViewMode('CARD')}
+                className={`px-3 py-2 text-sm font-bold transition-colors ${
+                  viewMode === 'CARD'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+                title="卡片视图"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h7v7H4V6zm9 0h7v7h-7V6zM4 15h7v3H4v-3zm9 0h7v3h-7v-3z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setViewMode('LIST')}
+                className={`px-3 py-2 text-sm font-bold transition-colors ${
+                  viewMode === 'LIST'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-500 hover:bg-slate-50'
+                }`}
+                title="列表视图"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />
+                </svg>
+              </button>
+            </div>
+
             <button 
               onClick={selectAllFiltered} 
               className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
@@ -374,21 +404,57 @@ const App: React.FC = () => {
         {isLoading ? (
           <div className="flex items-center justify-center py-24">Loading...</div>
         ) : filteredQuestions.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-24">
-            {filteredQuestions.map(q => (
-              <QuestionCard 
-                key={q.id} 
-                question={q} 
-                isSelected={selectedIds.has(q.id)}
-                onToggleSelect={() => toggleSelect(q.id)}
-                onDelete={activeTab === 'TRASH' ? hardDeleteQuestion : deleteQuestion}
-                onRestore={restoreQuestion}
-                onView={setActiveQuestion}
-                onUpdateDifficulty={updateQuestionDifficulty}
-                isTrashMode={activeTab === 'TRASH'}
-              />
-            ))}
-          </div>
+          viewMode === 'CARD' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-24">
+              {filteredQuestions.map(q => (
+                <QuestionCard 
+                  key={q.id} 
+                  question={q} 
+                  isSelected={selectedIds.has(q.id)}
+                  onToggleSelect={() => toggleSelect(q.id)}
+                  onDelete={activeTab === 'TRASH' ? hardDeleteQuestion : deleteQuestion}
+                  onRestore={restoreQuestion}
+                  onView={setActiveQuestion}
+                  onEdit={setEditingQuestion}
+                  onUpdateDifficulty={updateQuestionDifficulty}
+                  isTrashMode={activeTab === 'TRASH'}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-widest">
+                    <tr>
+                      <th className="px-6 py-4 text-center">选择</th>
+                      <th className="px-6 py-4">科目</th>
+                      <th className="px-6 py-4">题目</th>
+                      <th className="px-6 py-4">知识点</th>
+                      <th className="px-6 py-4">难度</th>
+                      <th className="px-6 py-4 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredQuestions.map(q => (
+                      <QuestionListItem
+                        key={q.id}
+                        question={q}
+                        isSelected={selectedIds.has(q.id)}
+                        onToggleSelect={() => toggleSelect(q.id)}
+                        onDelete={activeTab === 'TRASH' ? hardDeleteQuestion : deleteQuestion}
+                        onRestore={restoreQuestion}
+                        onView={setActiveQuestion}
+                        onEdit={setEditingQuestion}
+                        onUpdateDifficulty={updateQuestionDifficulty}
+                        isTrashMode={activeTab === 'TRASH'}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
         ) : (
           <div className="text-center py-24">暂无题目</div>
         )}
@@ -419,6 +485,16 @@ const App: React.FC = () => {
           onClose={() => setActiveQuestion(null)} 
           onUpdateDifficulty={updateQuestionDifficulty}
           onUpdateField={updateQuestionField}
+        />
+      )}
+      {editingQuestion && (
+        <QuestionEditDialog
+          question={editingQuestion}
+          onClose={() => setEditingQuestion(null)}
+          onSaved={(updated) => {
+            updateQuestionState(updated.id, updated);
+            if (activeQuestion?.id === updated.id) setActiveQuestion(updated);
+          }}
         />
       )}
       {isGeneratingTest && <TestGenerator questions={questions} onClose={() => setIsGeneratingTest(false)} />}
