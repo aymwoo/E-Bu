@@ -42,7 +42,7 @@
 # GitHub
 git clone https://github.com/aymwoo/E-Bu.git
 # Gitee
-git clone https://gitee.com/aymwoo/E-Bu.git
+git clone https://gitee.com/aymwoo/e-bu.git
 
 cd E-Bu
 
