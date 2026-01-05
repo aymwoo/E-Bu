@@ -1,0 +1,46 @@
+# Use the official Golang image to create a build artifact
+FROM golang:1.21-alpine AS builder
+
+# Switch Alpine repositories to a China-friendly mirror
+RUN sed -i 's#https\?://dl-cdn\.alpinelinux\.org#https://mirrors.aliyun.com#g' /etc/apk/repositories
+
+# Install gcc for CGO support
+RUN apk add --no-cache gcc musl-dev
+
+WORKDIR /app
+
+# Optional proxy args
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+ARG NO_PROXY
+ENV HTTP_PROXY=$HTTP_PROXY
+ENV HTTPS_PROXY=$HTTPS_PROXY
+ENV NO_PROXY=$NO_PROXY
+
+# Use China Go module proxy by default
+ENV GOPROXY=https://goproxy.cn,direct
+
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY . .
+
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main .
+
+# Final stage
+FROM alpine:3.19
+
+# Switch Alpine repositories to a China-friendly mirror
+RUN sed -i 's#https\?://dl-cdn\.alpinelinux\.org#https://mirrors.aliyun.com#g' /etc/apk/repositories
+
+RUN adduser -D -s /bin/sh appuser
+
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=builder /app/main .
+RUN chown -R appuser:appuser /app
+
+USER appuser
+EXPOSE 8080
+CMD ["./main"]
