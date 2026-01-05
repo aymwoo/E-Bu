@@ -38,8 +38,12 @@
 适合个人服务器、NAS (群晖/威联通) 或安装了 Docker 的电脑。
 
 ```bash
-# 1. 获取代码
+# 1. 获取代码（任选其一）
+# GitHub
 git clone https://github.com/aymwoo/E-Bu.git
+# Gitee
+git clone https://gitee.com/aymwoo/E-Bu.git
+
 cd E-Bu
 
 # 2. 启动服务
