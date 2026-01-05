@@ -105,7 +105,9 @@ func (db *DB) CreateQuestion(question *models.Question) error {
 	return db.Create(question).Error
 }
 
-func (db *DB) UpdateQuestion(id string, updates map[string]interface{}) error {
+func (db *DB) UpdateQuestion(id string, updates *models.Question) error {
+	// Use struct updates so GORM maps fields to snake_case columns.
+	// Also only non-zero fields are applied unless explicitly selected.
 	result := db.Model(&models.Question{}).Where("id = ?", id).Updates(updates)
 	return result.Error
 }

@@ -74,32 +74,47 @@ const QuestionEditDialog: React.FC<QuestionEditDialogProps> = ({
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h2 className="text-lg font-black text-slate-800">编辑题目</h2>
-            <p className="text-xs text-slate-500 mt-0.5">
-              支持 LaTeX：用 $...$ / $$...$$ 包裹公式
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all hover:text-slate-600"
-            title="关闭"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+        <div className="px-6 py-4 border-b space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-800">编辑题目</h2>
+              <p className="text-xs text-slate-500 mt-0.5">
+                支持 LaTeX：用 $...$ / $$...$$ 包裹公式
+              </p>
+            </div>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all hover:text-slate-600"
+              title="关闭"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth="2"
-                d="M6 18L18 6M6 6l12 12"
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M6 18L18 6M6 6l12 12"
+                />
+              </svg>
+            </button>
+          </div>
+
+          {question.image && (
+            <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                原始图片
+              </div>
+              <img
+                src={question.image}
+                alt="Original"
+                className="w-full max-h-48 object-contain rounded-xl bg-white"
               />
-            </svg>
-          </button>
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-2">

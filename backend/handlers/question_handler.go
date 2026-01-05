@@ -43,19 +43,19 @@ func (h *QuestionHandler) GetTrash(c *gin.Context) {
 // CreateQuestion creates a new question
 func (h *QuestionHandler) CreateQuestion(c *gin.Context) {
 	var req struct {
-		Image             *string  `json:"image"`
-		CroppedDiagram    *string  `json:"croppedDiagram"`
-		Content           string   `json:"content" binding:"required"`
-		Options           []string `json:"options"`
-		DiagramDescription *string `json:"diagramDescription"`
-		Answer            *string  `json:"answer"`
-		Analysis          string   `json:"analysis" binding:"required"`
-		LearningGuide     string   `json:"learningGuide" binding:"required"`
-		KnowledgePoints   []string `json:"knowledgePoints" binding:"required"`
-		Subject           string   `json:"subject" binding:"required"`
-		Difficulty        int      `json:"difficulty" binding:"min=1,max=5"`
+		Image              *string  `json:"image"`
+		CroppedDiagram     *string  `json:"croppedDiagram"`
+		Content            string   `json:"content" binding:"required"`
+		Options            []string `json:"options"`
+		DiagramDescription *string  `json:"diagramDescription"`
+		Answer             *string  `json:"answer"`
+		Analysis           string   `json:"analysis" binding:"required"`
+		LearningGuide      string   `json:"learningGuide" binding:"required"`
+		KnowledgePoints    []string `json:"knowledgePoints" binding:"required"`
+		Subject            string   `json:"subject" binding:"required"`
+		Difficulty         int      `json:"difficulty" binding:"min=1,max=5"`
 	}
-	
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -85,19 +85,19 @@ func (h *QuestionHandler) CreateQuestion(c *gin.Context) {
 	kpJSON, _ := json.Marshal(req.KnowledgePoints)
 
 	question := &models.Question{
-		ID:                uuid.New().String(),
-		Image:             req.Image,
-		CroppedDiagram:    req.CroppedDiagram,
-		Content:           req.Content,
-		Options:           jsonStringPtr(string(optionsJSON)),
+		ID:                 uuid.New().String(),
+		Image:              req.Image,
+		CroppedDiagram:     req.CroppedDiagram,
+		Content:            req.Content,
+		Options:            jsonStringPtr(string(optionsJSON)),
 		DiagramDescription: req.DiagramDescription,
-		Answer:            req.Answer,
-		Analysis:          req.Analysis,
-		LearningGuide:     req.LearningGuide,
-		KnowledgePoints:   jsonStringPtr(string(kpJSON)),
-		Subject:           subject,
-		Difficulty:        req.Difficulty,
-		CreatedAt:         time.Now(),
+		Answer:             req.Answer,
+		Analysis:           req.Analysis,
+		LearningGuide:      req.LearningGuide,
+		KnowledgePoints:    jsonStringPtr(string(kpJSON)),
+		Subject:            subject,
+		Difficulty:         req.Difficulty,
+		CreatedAt:          time.Now(),
 	}
 
 	if err := h.DB.CreateQuestion(question); err != nil {
@@ -111,17 +111,100 @@ func (h *QuestionHandler) CreateQuestion(c *gin.Context) {
 // UpdateQuestion updates an existing question
 func (h *QuestionHandler) UpdateQuestion(c *gin.Context) {
 	id := c.Param("id")
-	
-	var req map[string]interface{}
+
+	// Bind into a typed struct so field names are consistent and
+	// GORM can map struct fields to snake_case columns.
+	var req struct {
+		Image              *string    `json:"image"`
+		CroppedDiagram     *string    `json:"croppedDiagram"`
+		Content            *string    `json:"content"`
+		Options            []string   `json:"options"`
+		DiagramDescription *string    `json:"diagramDescription"`
+		Answer             *string    `json:"answer"`
+		Analysis           *string    `json:"analysis"`
+		LearningGuide      *string    `json:"learningGuide"`
+		KnowledgePoints    []string   `json:"knowledgePoints"`
+		Subject            *string    `json:"subject"`
+		Difficulty         *int       `json:"difficulty"`
+		LastReviewedAt     *time.Time `json:"lastReviewedAt"`
+		DeletedAt          *time.Time `json:"deletedAt"`
+	}
+
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Handle subject conversion if present
-	if subjectStr, ok := req["subject"].(string); ok {
+	// Load existing question so we can update only provided fields,
+	// while also supporting clearing fields via explicit null.
+	existing, err := h.DB.GetQuestionByID(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Question not found"})
+		return
+	}
+
+	updates := &models.Question{}
+
+	if req.Image != nil {
+		updates.Image = req.Image
+	} else {
+		updates.Image = existing.Image
+	}
+
+	if req.CroppedDiagram != nil {
+		updates.CroppedDiagram = req.CroppedDiagram
+	} else {
+		updates.CroppedDiagram = existing.CroppedDiagram
+	}
+
+	if req.DiagramDescription != nil {
+		updates.DiagramDescription = req.DiagramDescription
+	} else {
+		updates.DiagramDescription = existing.DiagramDescription
+	}
+
+	if req.Answer != nil {
+		updates.Answer = req.Answer
+	} else {
+		updates.Answer = existing.Answer
+	}
+
+	// String fields stored as NOT NULL in DB should always have values.
+	if req.Content != nil {
+		updates.Content = *req.Content
+	} else {
+		updates.Content = existing.Content
+	}
+
+	if req.Analysis != nil {
+		updates.Analysis = *req.Analysis
+	} else {
+		updates.Analysis = existing.Analysis
+	}
+
+	if req.LearningGuide != nil {
+		updates.LearningGuide = *req.LearningGuide
+	} else {
+		updates.LearningGuide = existing.LearningGuide
+	}
+
+	// Options / KnowledgePoints are stored as JSON strings.
+	if req.Options != nil {
+		updates.Options = stringSliceToJSONString(req.Options)
+	} else {
+		updates.Options = existing.Options
+	}
+
+	if req.KnowledgePoints != nil {
+		updates.KnowledgePoints = stringSliceToJSONString(req.KnowledgePoints)
+	} else {
+		updates.KnowledgePoints = existing.KnowledgePoints
+	}
+
+	// Subject conversion if present
+	if req.Subject != nil {
 		var subject models.Subject
-		switch subjectStr {
+		switch *req.Subject {
 		case "数学":
 			subject = models.Math
 		case "物理":
@@ -137,30 +220,30 @@ func (h *QuestionHandler) UpdateQuestion(c *gin.Context) {
 		default:
 			subject = models.Other
 		}
-		req["subject"] = subject
+		updates.Subject = subject
+	} else {
+		updates.Subject = existing.Subject
 	}
 
-	// Handle options conversion if present
-	if options, ok := req["options"].([]interface{}); ok {
-		optionStrings := make([]string, len(options))
-		for i, opt := range options {
-			optionStrings[i] = opt.(string)
-		}
-		optionsJSON, _ := json.Marshal(optionStrings)
-		req["options"] = string(optionsJSON)
+	if req.Difficulty != nil {
+		updates.Difficulty = *req.Difficulty
+	} else {
+		updates.Difficulty = existing.Difficulty
 	}
 
-	// Handle knowledgePoints conversion if present
-	if kps, ok := req["knowledgePoints"].([]interface{}); ok {
-		kpStrings := make([]string, len(kps))
-		for i, kp := range kps {
-			kpStrings[i] = kp.(string)
-		}
-		kpJSON, _ := json.Marshal(kpStrings)
-		req["knowledgePoints"] = string(kpJSON)
+	if req.LastReviewedAt != nil {
+		updates.LastReviewedAt = req.LastReviewedAt
+	} else {
+		updates.LastReviewedAt = existing.LastReviewedAt
 	}
 
-	if err := h.DB.UpdateQuestion(id, req); err != nil {
+	if req.DeletedAt != nil {
+		updates.DeletedAt = req.DeletedAt
+	} else {
+		updates.DeletedAt = existing.DeletedAt
+	}
+
+	if err := h.DB.UpdateQuestion(id, updates); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update question"})
 		return
 	}
@@ -177,7 +260,7 @@ func (h *QuestionHandler) UpdateQuestion(c *gin.Context) {
 // DeleteQuestion soft deletes a question
 func (h *QuestionHandler) DeleteQuestion(c *gin.Context) {
 	id := c.Param("id")
-	
+
 	if err := h.DB.DeleteQuestion(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete question"})
 		return
@@ -189,7 +272,7 @@ func (h *QuestionHandler) DeleteQuestion(c *gin.Context) {
 // RestoreQuestion restores a question from trash
 func (h *QuestionHandler) RestoreQuestion(c *gin.Context) {
 	id := c.Param("id")
-	
+
 	if err := h.DB.RestoreQuestion(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to restore question"})
 		return
@@ -201,7 +284,7 @@ func (h *QuestionHandler) RestoreQuestion(c *gin.Context) {
 // HardDeleteQuestion permanently deletes a question
 func (h *QuestionHandler) HardDeleteQuestion(c *gin.Context) {
 	id := c.Param("id")
-	
+
 	if err := h.DB.HardDeleteQuestion(id); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to permanently delete question"})
 		return
