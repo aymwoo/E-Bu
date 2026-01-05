@@ -12,6 +12,32 @@ import (
 	"gorm.io/gorm"
 )
 
+func ensureQuestionColumns(db *gorm.DB) error {
+	// sqlite schema fix: older DBs may miss newly added columns.
+	// Column names follow GORM's default naming strategy (snake_case).
+	type columnSpec struct {
+		Name string
+		DDL  string
+	}
+
+	columns := []columnSpec{
+		{
+			Name: "learning_guide",
+			DDL:  "ALTER TABLE questions ADD COLUMN learning_guide TEXT NOT NULL DEFAULT ''",
+		},
+	}
+
+	for _, col := range columns {
+		if db.Migrator().HasColumn(&models.Question{}, col.Name) {
+			continue
+		}
+		if err := db.Exec(col.DDL).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type DB struct {
 	*gorm.DB
 }
@@ -31,6 +57,14 @@ func NewDB(dsn string) (*DB, error) {
 	// Migrate the schema
 	err = db.AutoMigrate(&models.Question{}, &models.AIConfig{})
 	if err != nil {
+		return nil, err
+	}
+
+	// Backward-compatible migrations for older sqlite DBs.
+	// GORM's AutoMigrate sometimes won't add columns on sqlite if the
+	// existing schema is out of sync (e.g. legacy DB created before
+	// LearningGuide existed). Ensure required columns exist.
+	if err := ensureQuestionColumns(db); err != nil {
 		return nil, err
 	}
 

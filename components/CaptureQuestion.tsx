@@ -80,9 +80,9 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
     const newItem: BatchItem = {
       id: crypto.randomUUID(),
       preview: croppedImage,
-      status: 'pending'
+      status: 'pending',
     };
-    setItems(prev => [...prev, newItem]);
+    setItems((prev) => [...prev, newItem]);
     setCapturedImage(null);
   };
 
@@ -95,17 +95,14 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
     files.forEach((file: File) => {
       const reader = new FileReader();
       reader.onloadend = () => {
-        const newItem: BatchItem = {
-          id: crypto.randomUUID(),
-          preview: reader.result as string,
-          status: 'pending'
-        };
-        setItems(prev => [...prev, newItem]);
+        // Uploaded images should allow selecting the exact question region
+        // before sending to the AI provider.
+        setCapturedImage(reader.result as string);
       };
       // reader.readAsDataURL requires a Blob (which File inherits from).
       reader.readAsDataURL(file);
     });
-    
+
     // Reset input for same file re-selection if needed
     if (fileInputRef.current) fileInputRef.current.value = '';
   };

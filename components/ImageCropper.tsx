@@ -211,7 +211,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
           {/* Selection Area */}
           {(isDragging || cropRect) && (
             <div 
-              className="absolute border-2 border-indigo-400 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] z-10"
+              className="absolute border-2 border-indigo-400/60 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] z-10"
               style={{
                 left: rectX,
                 top: rectY,
@@ -219,10 +219,10 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 height: rectH
               }}
             >
-              <div className="absolute -top-1 -left-1 w-3 h-3 bg-indigo-400"></div>
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-400"></div>
-              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-indigo-400"></div>
-              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-indigo-400"></div>
+              <div className="absolute -top-1 -left-1 w-3 h-3 bg-indigo-400/60"></div>
+              <div className="absolute -top-1 -right-1 w-3 h-3 bg-indigo-400/60"></div>
+              <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-indigo-400/60"></div>
+              <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-indigo-400/60"></div>
               
               {cropRect && !isDragging && (
                  <div className="absolute top-2 left-2 bg-indigo-600 text-white text-[10px] px-1.5 py-0.5 rounded font-black uppercase tracking-widest shadow-lg">

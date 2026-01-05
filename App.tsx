@@ -478,7 +478,15 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {isCapturing && <CaptureQuestion onQuestionSaved={handleBatchSave} onCancel={() => setIsCapturing(false)} />}
+      {isCapturing && (
+        <CaptureQuestion
+          onQuestionSaved={handleBatchSave}
+          onCancel={() => {
+            setIsCapturing(false);
+            loadData();
+          }}
+        />
+      )}
       {activeQuestion && (
         <QuestionDialog 
           question={activeQuestion} 
