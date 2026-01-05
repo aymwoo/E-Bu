@@ -4,7 +4,7 @@ services:
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.final
+      dockerfile: Dockerfile
     ports:
       - "8080:8080"
     environment:

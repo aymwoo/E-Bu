@@ -23,15 +23,17 @@ RUN if [ -n "$HTTP_PROXY" ]; then \
     go env -w GOPROXY=https://goproxy.io,direct; \
     fi
 
-# Copy go mod files and vendor directory
+# Copy go mod files
 COPY go.mod go.sum ./
-COPY vendor ./vendor/
+
+# Download deps (cached by go.mod/go.sum layer)
+RUN go mod download
 
 # Copy source code
 COPY . .
 
-# Build the application using vendor directory
-RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -a -installsuffix cgo -o main .
+# Build the application
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main .
 
 # Final stage: Use Alpine to run the application
 FROM alpine:3.19
