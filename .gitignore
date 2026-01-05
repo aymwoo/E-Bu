@@ -25,3 +25,4 @@ data/ebu.db
 bun.lock
 .env
 backend/main.exe
+RELEASE_NOTES.md
