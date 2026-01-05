@@ -21,7 +21,7 @@ const CUSTOM_COLORS = [
 ];
 
 const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
-  const [activeTab, setActiveTab] = useState<'AI' | 'PROMPT' | 'ABOUT'>('AI');
+  const [activeTab, setActiveTab] = useState<'AI' | 'PROMPT' | 'DB' | 'ABOUT'>('AI');
   const [config, setConfig] = useState<AIConfig>({ 
     activeProvider: AIProviderType.GEMINI,
     providers: {},
@@ -34,6 +34,11 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
   const [isAddingCustom, setIsAddingCustom] = useState(false);
   const [newCustomName, setNewCustomName] = useState('');
 
+  // DB migration status
+  const [dbStatus, setDbStatus] = useState<any | null>(null);
+  const [isDbLoading, setIsDbLoading] = useState(false);
+  const [isDbMigrating, setIsDbMigrating] = useState(false);
+
   // Auto-hide toast after 3 seconds
   useEffect(() => {
     if (toast) {
@@ -42,20 +47,57 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
     }
   }, [toast]);
 
-  // Load config on mount
-  useEffect(() => {
-      const load = async () => {
-         try {
-            const config = await apiService.getAIConfig();
-            setConfig(config);
-            setSelectedProvider(config.activeProvider);
-         } catch (e) {
-            console.error("Failed to load config", e);
-            setToast({ type: 'error', message: '加载配置失败，请检查网络' });
-         }
-      };
-      load();
-  }, []);
+   // Load config on mount
+   useEffect(() => {
+       const load = async () => {
+          try {
+             const config = await apiService.getAIConfig();
+             setConfig(config);
+             setSelectedProvider(config.activeProvider);
+          } catch (e) {
+             console.error("Failed to load config", e);
+             setToast({ type: 'error', message: '加载配置失败，请检查网络' });
+          }
+       };
+       load();
+   }, []);
+
+   // Auto-load migration status when entering DB tab
+   useEffect(() => {
+     if (activeTab === 'DB' && !dbStatus && !isDbLoading) {
+       loadDbStatus();
+     }
+   }, [activeTab]);
+
+   const loadDbStatus = async () => {
+     try {
+       setIsDbLoading(true);
+       const status = await apiService.getMigrationStatus();
+       setDbStatus(status);
+     } catch (e) {
+       console.error('Failed to load migration status', e);
+       const errorMessage = e instanceof Error ? e.message : '加载迁移状态失败';
+       setToast({ type: 'error', message: errorMessage });
+     } finally {
+       setIsDbLoading(false);
+     }
+   };
+
+   const migrateDbToLatest = async () => {
+     try {
+       setIsDbMigrating(true);
+       const res = await apiService.migrateToLatest();
+       setToast({ type: 'success', message: `迁移完成：应用 ${res.count || 0} 个迁移` });
+       await loadDbStatus();
+     } catch (e) {
+       console.error('Migration failed', e);
+       const errorMessage = e instanceof Error ? e.message : '迁移失败';
+       setToast({ type: 'error', message: errorMessage });
+     } finally {
+       setIsDbMigrating(false);
+     }
+   };
+
 
   // Check if selected provider is a custom one
   const isCustomProvider = (id: AIProviderType | string): boolean => {
@@ -263,12 +305,19 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
             >
               提示词管理
             </button>
-            <button 
-              onClick={() => setActiveTab('ABOUT')}
-              className={`w-full text-left px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'ABOUT' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}
-            >
-              关于应用
-            </button>
+             <button 
+               onClick={() => setActiveTab('DB')}
+               className={`w-full text-left px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'DB' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}
+             >
+               数据库
+             </button>
+             <button 
+               onClick={() => setActiveTab('ABOUT')}
+               className={`w-full text-left px-4 py-2 rounded-xl text-sm font-bold transition-all ${activeTab === 'ABOUT' ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-500 hover:bg-slate-200'}`}
+             >
+               关于应用
+             </button>
+
           </nav>
           <button onClick={onClose} className="mt-auto px-4 py-2 text-sm font-bold text-slate-400 hover:text-slate-800 transition-colors">
             关闭窗口
@@ -522,6 +571,73 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
                 >
                   {isTesting ? '保存中...' : '保存配置'}
                 </button>
+              </div>
+            </div>
+          ) : activeTab === 'DB' ? (
+            <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+              <div>
+                <h3 className="text-lg font-bold text-slate-800 mb-2">数据库迁移</h3>
+                <p className="text-sm text-slate-500">用于版本升级后，自动将数据库无脑升级到最新结构（兼顾 Docker / 本机）。</p>
+              </div>
+
+              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-xs font-black text-slate-400 uppercase tracking-widest">DB PATH</div>
+                    <div className="text-sm font-bold text-slate-700 break-all">{dbStatus?.dbPath || '-'}</div>
+                  </div>
+                  <button
+                    onClick={loadDbStatus}
+                    disabled={isDbLoading}
+                    className="px-4 py-2 rounded-xl text-sm font-black border-2 border-slate-200 text-slate-600 hover:bg-white transition-all disabled:opacity-50"
+                  >
+                    {isDbLoading ? '刷新中...' : '刷新状态'}
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="p-3 rounded-xl bg-white border border-slate-100">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">CURRENT</div>
+                    <div className="text-lg font-black text-slate-800">{dbStatus?.current ?? '-'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white border border-slate-100">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">LATEST</div>
+                    <div className="text-lg font-black text-slate-800">{dbStatus?.latest ?? '-'}</div>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white border border-slate-100">
+                    <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">PENDING</div>
+                    <div className="text-lg font-black text-slate-800">{dbStatus?.pendingCount ?? '-'}</div>
+                  </div>
+                </div>
+
+                {dbStatus?.pending?.length > 0 ? (
+                  <div className="bg-amber-50 border border-amber-100 p-3 rounded-xl">
+                    <div className="text-xs font-bold text-amber-700 mb-2">待执行迁移</div>
+                    <div className="space-y-1">
+                      {dbStatus.pending.map((m: any) => (
+                        <div key={m.version} className="text-[11px] text-amber-800 font-mono">
+                          v{m.version} - {m.name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 border border-emerald-100 p-3 rounded-xl">
+                    <div className="text-xs font-bold text-emerald-700">暂无待执行迁移</div>
+                  </div>
+                )}
+
+                <button
+                  onClick={migrateDbToLatest}
+                  disabled={isDbMigrating}
+                  className="w-full py-3 bg-indigo-600 text-white font-black rounded-2xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDbMigrating ? '迁移中...' : '无脑升级到最新'}
+                </button>
+
+                <div className="text-[10px] text-slate-400 leading-relaxed">
+                  说明：执行会写入 `schema_migrations` 表用于记录版本；重复执行是安全的。
+                </div>
               </div>
             </div>
           ) : activeTab === 'PROMPT' ? (

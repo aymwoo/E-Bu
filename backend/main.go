@@ -49,6 +49,7 @@ func main() {
 	questionHandler := handlers.NewQuestionHandler(db)
 	aiConfigHandler := handlers.NewAIConfigHandler(db)
 	backupHandler := handlers.NewBackupHandler(db)
+	migrationHandler := handlers.NewMigrationHandler(db, dbPath)
 
 	// API routes
 	api := r.Group("/api")
@@ -70,6 +71,10 @@ func main() {
 		// Backup routes
 		api.GET("/export", backupHandler.ExportBackup)
 		api.POST("/import", backupHandler.ImportBackup)
+
+		// Database migrations
+		api.GET("/db/migrations", migrationHandler.GetMigrations)
+		api.POST("/db/migrate", migrationHandler.ApplyMigrations)
 	}
 
 	// Serve static files from frontend if available

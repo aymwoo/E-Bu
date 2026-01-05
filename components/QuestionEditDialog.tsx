@@ -25,6 +25,9 @@ const QuestionEditDialog: React.FC<QuestionEditDialogProps> = ({
   );
 
   const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<
+    { type: "success" | "error"; message: string } | null
+  >(null);
 
   const canSave = useMemo(() => {
     if (!content.trim()) return false;
@@ -49,6 +52,7 @@ const QuestionEditDialog: React.FC<QuestionEditDialogProps> = ({
   const handleSave = async () => {
     if (!canSave) return;
     setIsSaving(true);
+    setToast(null);
     try {
       const sanitizedOptions = options
         .map((o) => String(o || "").trim())
@@ -62,10 +66,15 @@ const QuestionEditDialog: React.FC<QuestionEditDialogProps> = ({
         learningGuide,
       });
 
+      setToast({ type: "success", message: "保存成功" });
       onSaved?.(updated);
-      onClose();
+
+      setTimeout(() => {
+        onClose();
+      }, 800);
     } catch (e: any) {
-      alert("保存失败：" + (e?.message || "未知错误"));
+      const message = e?.message || "未知错误";
+      setToast({ type: "error", message: `保存失败：${message}` });
     } finally {
       setIsSaving(false);
     }
@@ -75,6 +84,30 @@ const QuestionEditDialog: React.FC<QuestionEditDialogProps> = ({
     <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-5xl h-[90vh] rounded-2xl shadow-2xl overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b space-y-3">
+          {toast && (
+            <div
+              className={`p-3 rounded-xl border text-sm font-bold flex items-center gap-2 ${
+                toast.type === "success"
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  : "bg-rose-50 border-rose-200 text-rose-700"
+              }`}
+            >
+              <span>{toast.message}</span>
+              <button
+                onClick={() => setToast(null)}
+                className="ml-auto text-current opacity-50 hover:opacity-100 transition-opacity"
+                title="关闭提示"
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path
+                    fillRule="evenodd"
+                    d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-black text-slate-800">编辑题目</h2>

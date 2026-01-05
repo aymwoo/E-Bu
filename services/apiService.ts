@@ -247,6 +247,25 @@ export const apiService = {
     // Or fetch and download blob
   },
 
+  // Database migrations
+  async getMigrationStatus(): Promise<any> {
+    const res = await fetch("/api/db/migrations");
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      throw new Error(err.error || `Failed to get migrations: ${res.status}`);
+    }
+    return res.json();
+  },
+
+  async migrateToLatest(): Promise<any> {
+    const res = await fetch("/api/db/migrate", { method: "POST" });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: "Unknown error" }));
+      throw new Error(err.error || `Failed to migrate: ${res.status}`);
+    }
+    return res.json();
+  },
+
   async importBackup(jsonString: string): Promise<void> {
     // Backend expects { data: [...] } structure
     let parsed;

@@ -61,9 +61,12 @@ func NewDB(dsn string) (*DB, error) {
 	}
 
 	// Backward-compatible migrations for older sqlite DBs.
-	// GORM's AutoMigrate sometimes won't add columns on sqlite if the
-	// existing schema is out of sync (e.g. legacy DB created before
-	// LearningGuide existed). Ensure required columns exist.
+	// Keep two layers:
+	// 1) apply migrations to latest (tracked by schema_migrations)
+	// 2) legacy safety net (ensureQuestionColumns) for very old DBs
+	if _, err := ApplyMigrationsToLatest(db); err != nil {
+		return nil, err
+	}
 	if err := ensureQuestionColumns(db); err != nil {
 		return nil, err
 	}
