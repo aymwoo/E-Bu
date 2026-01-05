@@ -212,22 +212,21 @@ const QuestionDialog: React.FC<QuestionDialogProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* Analysis Section */}
               <section>
-                <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  精辟解题思路
-                </h3>
-                <div className="bg-emerald-50/50 p-8 rounded-3xl border border-emerald-100 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4">
-                    <div className="bg-white px-3 py-1 rounded-full shadow-sm border border-emerald-100">
-                      <span className="text-[10px] font-black text-emerald-400 uppercase mr-1">Correct Answer</span>
-                      <span className="text-sm font-black text-emerald-600">{question.answer}</span>
-                    </div>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <h3 className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.2em] flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                    </svg>
+                    精辟解题思路
+                  </h3>
+
+                  <div className="bg-white px-3 py-1 rounded-md shadow-sm border border-emerald-100 shrink-0">
+                    <span className="text-[10px] font-black text-emerald-400 mr-1">正确答案</span>
+                    <LaTeXRenderer content={question.answer} className="text-lg font-black text-emerald-600 inline" />
                   </div>
-                  <div className="mt-4">
-                    <LaTeXRenderer content={question.analysis} className="text-slate-700 leading-relaxed" />
-                  </div>
+                </div>
+                <div className="bg-emerald-50/50 p-8 rounded-3xl border border-emerald-100">
+                  <LaTeXRenderer content={question.analysis} className="text-slate-700 leading-relaxed" />
                 </div>
               </section>
 
