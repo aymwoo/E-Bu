@@ -3,6 +3,23 @@ setlocal EnableDelayedExpansion
 
 echo === E-Bu Local Server Startup (Windows) ===
 
+echo Usage: runserver.bat [--rebuild]
+
+echo.
+set "FORCE_REBUILD=0"
+if not "%~1"=="" (
+    if /I "%~1"=="--rebuild" (
+        set "FORCE_REBUILD=1"
+    ) else if /I "%~1"=="--help" (
+        exit /b 0
+    ) else if /I "%~1"=="-h" (
+        exit /b 0
+    ) else (
+        echo Unknown argument: %~1
+        exit /b 1
+    )
+)
+
 REM Check for Go
 where go >nul 2>nul
 if errorlevel 1 (
@@ -26,7 +43,13 @@ call npm config set registry https://registry.npmmirror.com
 REM Frontend Build
 echo [1/2] Checking Frontend...
 if exist dist (
-    echo Frontend build found. Skipping rebuild.
+    if "%FORCE_REBUILD%"=="1" (
+        echo Rebuilding frontend...
+        call npm install
+        call npm run build
+    ) else (
+        echo Frontend build found. Skipping rebuild. Use --rebuild to force update.
+    )
 ) else (
     echo Building frontend...
     call npm install
