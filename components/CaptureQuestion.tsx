@@ -23,6 +23,7 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const [capturedSource, setCapturedSource] = useState<'upload' | 'camera' | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -72,18 +73,20 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
       ctx.drawImage(videoRef.current, 0, 0);
       const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
       setCapturedImage(dataUrl);
+      setCapturedSource('camera');
       closeCamera(); // Close camera stream, move to crop mode
     }
   };
 
-  const handleCroppedPhoto = (croppedImage: string) => {
+  const handleSelectedPhoto = (image: string) => {
     const newItem: BatchItem = {
       id: crypto.randomUUID(),
-      preview: croppedImage,
+      preview: image,
       status: 'pending',
     };
     setItems((prev) => [...prev, newItem]);
     setCapturedImage(null);
+    setCapturedSource(null);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +101,7 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
         // Uploaded images should allow selecting the exact question region
         // before sending to the AI provider.
         setCapturedImage(reader.result as string);
+        setCapturedSource('upload');
       };
       // reader.readAsDataURL requires a Blob (which File inherits from).
       reader.readAsDataURL(file);
@@ -362,16 +366,19 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
       {capturedImage && (
         <ImageCropper
           imageSrc={capturedImage}
-          onCropComplete={handleCroppedPhoto}
+          allowSkip={true}
+          onCropComplete={handleSelectedPhoto}
+          onSkip={handleSelectedPhoto}
           onCancel={() => {
             setCapturedImage(null);
-            // Re-open camera if user cancels crop? 
-            // Better to just go back to main view or re-open camera. 
-            // Let's re-open camera for continuous shooting experience.
-            openCamera(); 
+            const source = capturedSource;
+            setCapturedSource(null);
+            if (source === 'camera') {
+              openCamera();
+            }
           }}
           title="裁剪题目区域"
-          description="请拖动方框选择要识别的题目区域"
+          description="需要更精准识别时再裁剪；也可直接使用原图"
         />
       )}
     </div>

@@ -7,14 +7,25 @@ interface ImageCropperProps {
   onCancel: () => void;
   title?: string;
   description?: string;
+  /**
+   * When true, cropping becomes optional and is only enabled
+   * after the user explicitly chooses to crop.
+   */
+  allowSkip?: boolean;
+  /**
+   * Called when the user chooses to use the original image as-is.
+   */
+  onSkip?: (originalBase64: string) => void;
 }
 
 const ImageCropper: React.FC<ImageCropperProps> = ({ 
   imageSrc, 
   onCropComplete, 
   onCancel,
-  title = "截取题目图例",
-  description = "拖拽鼠标框定需要保留的图示区域"
+  title = "截图题目图例",
+  description = "拖拽鼠标框定需要保留的图示区域",
+  allowSkip = false,
+  onSkip
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -22,13 +33,17 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   
   const [displayImageSrc, setDisplayImageSrc] = useState(imageSrc);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCropEnabled, setIsCropEnabled] = useState(!allowSkip);
   const [startPos, setStartPos] = useState({ x: 0, y: 0 });
   const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
   const [cropRect, setCropRect] = useState<{ x: number, y: number, w: number, h: number } | null>(null);
 
   useEffect(() => {
     setDisplayImageSrc(imageSrc);
-  }, [imageSrc]);
+    setIsCropEnabled(!allowSkip);
+    setCropRect(null);
+    setIsDragging(false);
+  }, [imageSrc, allowSkip]);
 
   const rotateImage = (direction: 'left' | 'right') => {
     const img = new Image();
@@ -53,18 +68,20 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   };
 
   const handleMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+    if (!isCropEnabled) return;
+
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
-    
+
     // Check if click target is one of the buttons
     if ((e.target as HTMLElement).closest('button')) return;
-    
+
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    
+
     const x = clientX - rect.left;
     const y = clientY - rect.top;
-    
+
     setIsDragging(true);
     setStartPos({ x, y });
     setCurrentPos({ x, y });
@@ -72,7 +89,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   };
 
   const handleMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!isDragging) return;
+    if (!isCropEnabled || !isDragging) return;
     
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -87,7 +104,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   };
 
   const handleMouseUp = () => {
-    if (!isDragging) return;
+    if (!isCropEnabled || !isDragging) return;
     setIsDragging(false);
     
     const x = Math.min(startPos.x, currentPos.x);
@@ -101,7 +118,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   };
 
   const handleSave = () => {
-    if (!cropRect || !imgRef.current || !canvasRef.current) return;
+    if (!isCropEnabled || !cropRect || !imgRef.current || !canvasRef.current) return;
     
     const img = imgRef.current;
     const canvas = canvasRef.current;
@@ -135,6 +152,18 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
   const rectW = Math.abs(currentPos.x - startPos.x);
   const rectH = Math.abs(currentPos.y - startPos.y);
 
+  const handleEnableCrop = () => {
+    setIsCropEnabled(true);
+    setCropRect(null);
+    setIsDragging(false);
+  };
+
+  const handleSkip = () => {
+    if (!allowSkip) return;
+    const cb = onSkip || onCropComplete;
+    cb(displayImageSrc);
+  };
+
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-md flex flex-col p-4 md:p-8 animate-in fade-in duration-300">
       <div className="flex justify-between items-center mb-6 max-w-5xl mx-auto w-full">
@@ -165,6 +194,25 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
                 </button>
             </div>
             
+          {allowSkip && (
+            <button
+              onClick={handleSkip}
+              className="px-5 py-2 rounded-xl bg-white/10 text-white hover:bg-white/15 transition-colors font-semibold"
+              title="不裁剪，直接使用整张图片"
+            >
+              直接使用原图
+            </button>
+          )}
+          {allowSkip && !isCropEnabled && (
+            <button
+              onClick={handleEnableCrop}
+              className="px-5 py-2 rounded-xl border border-white/15 text-slate-200 hover:text-white hover:bg-white/10 transition-colors font-semibold"
+              title="需要更精准识别时再裁剪"
+            >
+              裁剪题目区域
+            </button>
+          )}
+
           <button 
             onClick={onCancel}
             className="px-5 py-2 rounded-xl text-slate-300 hover:text-white hover:bg-white/10 transition-colors font-semibold"
@@ -172,7 +220,7 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
             取消
           </button>
           <button 
-            disabled={!cropRect && !isDragging}
+            disabled={!isCropEnabled || !cropRect || isDragging}
             onClick={handleSave}
             className="px-6 py-2 bg-indigo-600 text-white rounded-xl font-bold hover:bg-indigo-700 shadow-xl shadow-indigo-900/20 disabled:opacity-50 disabled:grayscale transition-all flex items-center gap-2"
           >
@@ -184,10 +232,18 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
         </div>
       </div>
 
-      <div className="flex-1 flex items-center justify-center overflow-hidden relative">
-        <div 
-          ref={containerRef}
-          className="relative max-w-full max-h-full cursor-crosshair select-none touch-none bg-black/40 rounded-lg overflow-hidden border border-white/10"
+       <div className="flex-1 flex items-center justify-center overflow-hidden relative">
+         {!isCropEnabled && allowSkip && (
+           <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-4 py-2 rounded-xl bg-black/40 text-slate-200 text-xs font-semibold border border-white/10">
+             可直接使用原图；需要更精准时再点“裁剪题目区域”
+           </div>
+         )}
+         <div 
+           ref={containerRef}
+           className={`relative max-w-full max-h-full select-none touch-none bg-black/40 rounded-lg overflow-hidden border border-white/10 ${
+             isCropEnabled ? 'cursor-crosshair' : 'cursor-default'
+           }`}
+
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
@@ -205,11 +261,13 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
             }}
           />
           
-          {/* Overlay mask */}
-          <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>
+           {/* Overlay mask */}
+           {isCropEnabled && <div className="absolute inset-0 bg-black/40 pointer-events-none"></div>}
 
-          {/* Selection Area */}
-          {(isDragging || cropRect) && (
+
+           {/* Selection Area */}
+           {isCropEnabled && (isDragging || cropRect) && (
+
             <div 
               className="absolute border-2 border-indigo-400/60 bg-transparent shadow-[0_0_0_9999px_rgba(0,0,0,0.5)] z-10"
               style={{
@@ -236,22 +294,25 @@ const ImageCropper: React.FC<ImageCropperProps> = ({
       
       <canvas ref={canvasRef} className="hidden" />
       
-      <div className="max-w-5xl mx-auto w-full mt-6 flex justify-center">
-         <div className="flex items-center gap-8 text-slate-500 text-xs font-medium">
-            <div className="flex items-center gap-2">
-               <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
-               <span>拖拽框选</span>
-            </div>
-            <div className="flex items-center gap-2">
-               <span className="w-2 h-2 rounded-full bg-slate-500"></span>
-               <span>松开确认</span>
-            </div>
-             <div className="flex items-center gap-2">
-               <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-               <span>点击保存</span>
+       {isCropEnabled && (
+         <div className="max-w-5xl mx-auto w-full mt-6 flex justify-center">
+            <div className="flex items-center gap-8 text-slate-500 text-xs font-medium">
+               <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                  <span>拖拽框选</span>
+               </div>
+               <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+                  <span>松开确认</span>
+               </div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  <span>点击保存</span>
+               </div>
             </div>
          </div>
-      </div>
+       )}
+
     </div>
   );
 };
