@@ -167,10 +167,31 @@ export const apiService = {
       options: ensureArray(data.options),
       knowledgePoints: ensureArray(data.knowledgePoints, ["综合"]),
       subject: String(data.subject || "数学"),
-      // Handle array answer (e.g. multiple choice ["A", "B"])
-      answer: Array.isArray(data.answer)
-        ? data.answer.join(", ")
-        : String(data.answer || "暂无答案"),
+      // Handle array answer (e.g. multiple choice ["A", "B"]) and ensure LaTeX is rendered.
+      // LaTeXRenderer only renders formulas inside $...$/$$...$$/\(...\)/\[...\].
+      // If the answer contains LaTeX but is missing delimiters, wrap it.
+      answer: (() => {
+        const raw = Array.isArray(data.answer)
+          ? data.answer.join(", ")
+          : String(data.answer || "暂无答案");
+
+        const trimmed = raw.trim();
+        const hasMathDelimiters =
+          trimmed.includes("$$") ||
+          /(^|[^\\])\$/.test(trimmed) ||
+          trimmed.includes("\\(") ||
+          trimmed.includes("\\[");
+
+        if (hasMathDelimiters) return raw;
+
+        const looksLikeLatex =
+          /\\[a-zA-Z]+/.test(trimmed) ||
+          /\^|_/.test(trimmed) ||
+          /\{.*\}/.test(trimmed) ||
+          /\b(sin|cos|tan|log|ln|frac|sqrt)\b/.test(trimmed);
+
+        return looksLikeLatex ? `$${raw}$` : raw;
+      })(),
       analysis: String(data.analysis || "暂无解析"),
       learningGuide: String(data.learningGuide || "暂无建议"),
       difficulty: Number(data.difficulty) || 3,
