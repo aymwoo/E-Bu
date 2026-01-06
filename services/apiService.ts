@@ -28,6 +28,88 @@ const transformQuestionFromApi = (q: any): Question => {
   };
 };
 
+const MATH_SPANS_PATTERN = /\$\$[\s\S]*?\$\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$(?:\\\$|[^$])*\$/g;
+
+const RAW_LATEX_COMMAND_PATTERN =
+  /\\(?:frac|sqrt|times|cdot|pm|leq|geq|neq|approx|pi|theta|sin|cos|tan|log|ln|sum|prod|int|cdots|ldots)\b(?:\s*\{[^{}]*\})?/g;
+
+const RAW_FRAC_PATTERN =
+  /\\frac\s*\{[^{}]*\}\s*\{[^{}]*\}/g;
+
+const RAW_SIMPLE_EXPR_PATTERN =
+  /(?<!\\)\b[A-Za-z0-9]+(?:\^[A-Za-z0-9]+|_\{[^{}]*\}|_[A-Za-z0-9]+)(?:\s*[+\-*/]\s*\d+)?/g;
+
+const RAW_SUPSUB_PATTERN = /(?<!\\)\b[A-Za-z0-9]+(?:\^\{[^{}]*\}|\^[A-Za-z0-9]+|_\{[^{}]*\}|_[A-Za-z0-9]+)+/g;
+
+const looksLikeMathOnly = (s: string): boolean => {
+  const trimmed = String(s || "").trim();
+  if (!trimmed) return false;
+
+  const hasMathDelimiters =
+    trimmed.includes("$$") ||
+    /(^|[^\\])\$/.test(trimmed) ||
+    trimmed.includes("\\(") ||
+    trimmed.includes("\\[");
+  if (hasMathDelimiters) return false;
+
+  if (/[\u4e00-\u9fff]/.test(trimmed)) return false;
+
+  return (
+    RAW_LATEX_COMMAND_PATTERN.test(trimmed) ||
+    RAW_SUPSUB_PATTERN.test(trimmed) ||
+    /[=+\-*/()<>]/.test(trimmed)
+  );
+};
+
+const normalizeLatexInText = (input: unknown): string => {
+  const raw = String(input ?? "");
+  if (!raw.trim()) return raw;
+
+  // Keep existing math spans intact; only wrap raw segments outside them.
+  const spans: Array<{ start: number; end: number }> = [];
+  for (const m of raw.matchAll(MATH_SPANS_PATTERN)) {
+    if (m.index == null) continue;
+    spans.push({ start: m.index, end: m.index + m[0].length });
+  }
+
+  const isInSpan = (index: number) =>
+    spans.some((s) => index >= s.start && index < s.end);
+
+    const addSpan = (start: number, end: number) => {
+    spans.push({ start, end });
+  };
+
+  const wrapOutsideSpans = (pattern: RegExp, content: string) => {
+    return content.replace(pattern, (match, offset: number) => {
+      if (isInSpan(offset)) return match;
+      if (/^\\[ntr]$/.test(match)) return match;
+
+      const wrapped = `$${match}$`;
+      addSpan(offset, offset + wrapped.length);
+      return wrapped;
+    });
+  };
+
+  if (looksLikeMathOnly(raw)) return `$${raw}$`;
+
+  let result = raw;
+  // Wrap more specific patterns first to avoid partial wrapping.
+  result = wrapOutsideSpans(RAW_FRAC_PATTERN, result);
+  result = wrapOutsideSpans(RAW_LATEX_COMMAND_PATTERN, result);
+  result = wrapOutsideSpans(RAW_SIMPLE_EXPR_PATTERN, result);
+  result = wrapOutsideSpans(RAW_SUPSUB_PATTERN, result);
+
+  return result;
+};
+
+const normalizeLatexInOptions = (options: any): string[] => {
+  if (!options) return [];
+  const arr = Array.isArray(options) ? options : [options];
+  return arr.map((opt) =>
+    normalizeLatexInText(typeof opt === "string" ? opt : JSON.stringify(opt))
+  );
+};
+
 export const apiService = {
   // AI Config Management
   async getAIConfig(): Promise<AIConfig> {
@@ -46,6 +128,7 @@ export const apiService = {
         activeProvider: AIProviderType.GEMINI,
         providers: {},
         customProviders: [],
+        enableLatexAutoFix: true,
       };
       return { ...defaultConfig, ...data };
     } catch (e) {
@@ -54,6 +137,7 @@ export const apiService = {
         activeProvider: AIProviderType.GEMINI,
         providers: {},
         customProviders: [],
+        enableLatexAutoFix: true,
       };
     }
   },
@@ -163,37 +247,19 @@ export const apiService = {
     // Sanitize data to satisfy backend requirements
     const payload = {
       ...data,
-      content: String(data.content || ""),
-      options: ensureArray(data.options),
+      content: normalizeLatexInText(data.content || ""),
+      options: normalizeLatexInOptions(ensureArray(data.options)),
       knowledgePoints: ensureArray(data.knowledgePoints, ["综合"]),
       subject: String(data.subject || "数学"),
       // Handle array answer (e.g. multiple choice ["A", "B"]) and ensure LaTeX is rendered.
-      // LaTeXRenderer only renders formulas inside $...$/$$...$$/\(...\)/\[...\].
-      // If the answer contains LaTeX but is missing delimiters, wrap it.
       answer: (() => {
         const raw = Array.isArray(data.answer)
           ? data.answer.join(", ")
           : String(data.answer || "暂无答案");
-
-        const trimmed = raw.trim();
-        const hasMathDelimiters =
-          trimmed.includes("$$") ||
-          /(^|[^\\])\$/.test(trimmed) ||
-          trimmed.includes("\\(") ||
-          trimmed.includes("\\[");
-
-        if (hasMathDelimiters) return raw;
-
-        const looksLikeLatex =
-          /\\[a-zA-Z]+/.test(trimmed) ||
-          /\^|_/.test(trimmed) ||
-          /\{.*\}/.test(trimmed) ||
-          /\b(sin|cos|tan|log|ln|frac|sqrt)\b/.test(trimmed);
-
-        return looksLikeLatex ? `$${raw}$` : raw;
+        return normalizeLatexInText(raw);
       })(),
-      analysis: String(data.analysis || "暂无解析"),
-      learningGuide: String(data.learningGuide || "暂无建议"),
+      analysis: normalizeLatexInText(data.analysis || "暂无解析"),
+      learningGuide: normalizeLatexInText(data.learningGuide || "暂无建议"),
       difficulty: Number(data.difficulty) || 3,
     };
 

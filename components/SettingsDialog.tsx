@@ -6,6 +6,7 @@ import { DEFAULT_SYSTEM_PROMPT, testAIConfig } from '../services/imageAnalysisSe
 
 interface SettingsDialogProps {
   onClose: () => void;
+  onConfigSaved?: (config: AIConfig) => void;
 }
 
 // Color options for custom providers
@@ -20,12 +21,13 @@ const CUSTOM_COLORS = [
   'from-fuchsia-500 to-pink-500',
 ];
 
-const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
+const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose, onConfigSaved }) => {
   const [activeTab, setActiveTab] = useState<'AI' | 'PROMPT' | 'DB' | 'ABOUT'>('AI');
   const [config, setConfig] = useState<AIConfig>({ 
     activeProvider: AIProviderType.GEMINI,
     providers: {},
-    customProviders: []
+    customProviders: [],
+    enableLatexAutoFix: true,
   });
   const [selectedProvider, setSelectedProvider] = useState<AIProviderType | string>(AIProviderType.GEMINI);
   const [isTesting, setIsTesting] = useState(false);
@@ -51,9 +53,9 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
    useEffect(() => {
        const load = async () => {
           try {
-             const config = await apiService.getAIConfig();
-             setConfig(config);
-             setSelectedProvider(config.activeProvider);
+              const config = await apiService.getAIConfig();
+              setConfig({ enableLatexAutoFix: true, ...config });
+              setSelectedProvider(config.activeProvider);
           } catch (e) {
              console.error("Failed to load config", e);
              setToast({ type: 'error', message: '加载配置失败，请检查网络' });
@@ -216,6 +218,7 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
       await testAIConfig(testConfig);
 
       apiService.saveAIConfig(config);
+      onConfigSaved?.(config);
       setToast({ type: 'success', message: '设置已成功保存！' });
       setTestResult({ success: true, message: '配置测试成功！' });
 
@@ -358,6 +361,34 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose }) => {
               <div>
                 <h3 className="text-lg font-bold text-slate-800 mb-2">模型引擎配置</h3>
                 <p className="text-sm text-slate-500">选择并配置 AI 服务提供商，每个服务商的配置独立保存。</p>
+              </div>
+
+              <div className="p-4 bg-white rounded-2xl border border-slate-100">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-black text-slate-800">LaTeX 自动修复（显示兜底）</div>
+                    <div className="text-xs text-slate-500 leading-relaxed mt-1">
+                      开启后：当解析/题干中出现未用 <span className="font-mono">$...$</span> 包裹的公式（如 <span className="font-mono">\\sqrt</span> / <span className="font-mono">\\frac</span>）时，页面会尝试自动渲染。
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfig(prev => ({ ...prev, enableLatexAutoFix: !prev.enableLatexAutoFix }));
+                      try {
+                        localStorage.setItem('latexAutofixEnabled', String(!config.enableLatexAutoFix));
+                      } catch {
+                        // ignore
+                      }
+                    }}
+                    className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${config.enableLatexAutoFix ? 'bg-emerald-500' : 'bg-slate-300'}`}
+                    aria-label="toggle-latex-autofix"
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${config.enableLatexAutoFix ? 'translate-x-6' : 'translate-x-1'}`}
+                    />
+                  </button>
+                </div>
               </div>
 
               {/* Built-in Provider Selection */}

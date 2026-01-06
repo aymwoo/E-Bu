@@ -1,11 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Question, Subject } from './types';
+import { Question, Subject, AIConfig } from './types';
 import { apiService } from './services/apiService';
 import QuestionCard from './components/QuestionCard';
 import QuestionListItem from './components/QuestionListItem';
 import QuestionDialog from './components/QuestionDialog';
 import QuestionEditDialog from './components/QuestionEditDialog';
+import LaTeXRenderer from './components/LaTeXRenderer';
 import CaptureQuestion from './components/CaptureQuestion';
 import TestGenerator from './components/TestGenerator';
 import WorkbookGenerator from './components/WorkbookGenerator';
@@ -32,9 +33,12 @@ const App: React.FC = () => {
   
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
+  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
+
   useEffect(() => {
     // Initial sync of global AI config
     apiService.syncRemoteConfig();
+    apiService.getAIConfig().then(setAiConfig).catch(() => setAiConfig(null));
   }, []);
 
   useEffect(() => {
@@ -508,7 +512,12 @@ const App: React.FC = () => {
       {isGeneratingTest && <TestGenerator questions={questions} onClose={() => setIsGeneratingTest(false)} />}
       {isGeneratingWorkbook && <WorkbookGenerator questions={getSelectedQuestions()} onClose={() => setIsGeneratingWorkbook(false)} />}
       {isShowingHelp && <HelpCenter onClose={() => setIsShowingHelp(false)} onDataChanged={loadData} />}
-      {isShowingSettings && <SettingsDialog onClose={() => setIsShowingSettings(false)} />}
+      {isShowingSettings && (
+        <SettingsDialog
+          onClose={() => setIsShowingSettings(false)}
+          onConfigSaved={(nextConfig) => setAiConfig(nextConfig)}
+        />
+      )}
     </div>
   );
 };

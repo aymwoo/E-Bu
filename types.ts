@@ -40,6 +40,7 @@ export interface AIConfig {
   };
   customProviders: CustomAIProvider[]; // User-defined providers
   systemPrompt?: string; // 用户自定义的系统提示词（所有 provider 共享）
+  enableLatexAutoFix?: boolean; // 展示层兜底：自动识别未包 $...$ 的 LaTeX
 }
 
 // Flattened config for the active provider, used by imageAnalysisService
