@@ -226,6 +226,10 @@ const QuestionDialog: React.FC<QuestionDialogProps> = ({
                   </div>
                 </div>
                 <div className="bg-emerald-50/50 p-8 rounded-3xl border border-emerald-100">
+                  <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-[12px] text-amber-800 leading-relaxed">
+                    <span className="font-black mr-2">重要提示</span>
+                    题目解析来自大模型生成，可能出错，仅供参考，请自行核对。
+                  </div>
                   <LaTeXRenderer content={question.analysis} className="text-slate-700 leading-relaxed" />
                 </div>
               </section>
