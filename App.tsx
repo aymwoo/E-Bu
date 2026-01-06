@@ -50,6 +50,7 @@ const App: React.FC = () => {
     return parsed;
   });
   const [total, setTotal] = useState(0);
+  const [trashTotal, setTrashTotal] = useState(0);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -84,9 +85,13 @@ const App: React.FC = () => {
     setIsLoading(true);
     try {
       if (activeTab === 'LIBRARY') {
-        // Ensure badge count reflects trash, not library.
+        // Keep trash badge count updated (not affected by current filters).
         const trashRes = await apiService.fetchTrash({ page: 1, pageSize: 1 });
-        if (!Array.isArray(trashRes)) setTrashQuestions([]);
+        if (Array.isArray(trashRes)) {
+          setTrashTotal(trashRes.length);
+        } else {
+          setTrashTotal(trashRes.total);
+        }
 
         const res = await apiService.fetchQuestions({
           page,
@@ -114,9 +119,11 @@ const App: React.FC = () => {
         if (Array.isArray(res)) {
           setTrashQuestions(res);
           setTotal(res.length);
+          setTrashTotal(res.length);
         } else {
           setTrashQuestions(res.items);
           setTotal(res.total);
+          setTrashTotal(res.total);
         }
       }
       setSelectedIds(new Set());
@@ -145,7 +152,10 @@ const App: React.FC = () => {
         await apiService.deleteQuestion(id);
         setQuestions(prev => prev.filter(q => q.id !== id));
         const q = questions.find(item => item.id === id);
-        if (q) setTrashQuestions(prev => [{...q, deletedAt: Date.now()}, ...prev]);
+        if (q) {
+          setTrashQuestions(prev => [{...q, deletedAt: Date.now()}, ...prev]);
+          setTrashTotal((n) => n + 1);
+        }
         if (activeQuestion?.id === id) setActiveQuestion(null);
         removeFromSelection(id);
       } catch (e) {
@@ -159,6 +169,7 @@ const App: React.FC = () => {
       await apiService.restoreQuestion(id);
       const restored = trashQuestions.find(q => q.id === id);
       setTrashQuestions(prev => prev.filter(q => q.id !== id));
+      setTrashTotal((n) => Math.max(0, n - 1));
       if (restored) setQuestions(prev => [restored, ...prev]);
       removeFromSelection(id);
     } catch (e) {
@@ -171,6 +182,8 @@ const App: React.FC = () => {
       try {
         await apiService.hardDeleteQuestion(id);
         setTrashQuestions(prev => prev.filter(q => q.id !== id));
+        setTrashTotal((n) => Math.max(0, n - 1));
+
         removeFromSelection(id);
       } catch (e) {
         alert("操作失败");
@@ -393,9 +406,9 @@ const App: React.FC = () => {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-               {activeTab === 'LIBRARY' && total > 0 && (
+               {activeTab === 'LIBRARY' && trashTotal > 0 && (
                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full font-bold">
-                   {total}
+                   {trashTotal}
                  </span>
                )}
 
