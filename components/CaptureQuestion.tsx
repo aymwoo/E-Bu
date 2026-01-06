@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { apiService } from '../services/apiService';
 import { Question } from '../types';
 import ImageCropper from './ImageCropper';
@@ -27,6 +27,78 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
+
+  const blobToDataUrl = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('读取图片失败'));
+      reader.onloadend = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  const handleClipboardImage = (dataUrl: string) => {
+    setCapturedImage(dataUrl);
+    setCapturedSource('upload');
+  };
+
+  const addFromClipboard = async () => {
+    if (isProcessing) return;
+    const dataUrl = await readImageFromClipboard();
+    if (!dataUrl) {
+      alert('剪贴板中没有图片，请先截图/复制图片后再试');
+      return;
+    }
+    handleClipboardImage(dataUrl);
+  };
+
+  const readImageFromClipboard = async (): Promise<string | null> => {
+    // Prefer async Clipboard API (more accurate for images)
+    try {
+      const anyNavigator = navigator as any;
+      if (anyNavigator.clipboard?.read) {
+        const clipboardItems: any[] = await anyNavigator.clipboard.read();
+        for (const clipboardItem of clipboardItems) {
+          const types: string[] = clipboardItem.types || [];
+          const imageType = types.find((t) => t.startsWith('image/'));
+          if (!imageType) continue;
+          const blob: Blob = await clipboardItem.getType(imageType);
+          return await blobToDataUrl(blob);
+        }
+        return null;
+      }
+    } catch {
+      // Fall back to paste event approach
+    }
+
+    return null;
+  };
+
+  useEffect(() => {
+    const onPaste = async (e: ClipboardEvent) => {
+      if (isProcessing || isCameraOpen || capturedImage) return;
+
+      // Try to read from event clipboardData first
+      const items = Array.from(e.clipboardData?.items || []);
+      const imageItem = items.find((it) => it.type?.startsWith('image/'));
+      if (imageItem) {
+        e.preventDefault();
+        const file = imageItem.getAsFile();
+        if (file) handleClipboardImage(await blobToDataUrl(file));
+        return;
+      }
+
+      // Fall back to async clipboard API (some browsers don't populate clipboardData)
+      const dataUrl = await readImageFromClipboard();
+      if (dataUrl) {
+        e.preventDefault();
+        handleClipboardImage(dataUrl);
+      }
+    };
+
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [isProcessing, isCameraOpen, capturedImage]);
 
   const openCamera = async () => {
     try {
@@ -178,39 +250,51 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
 
         {/* Content Area */}
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
-          {items.length === 0 ? (
-            <div className="h-full flex flex-col md:flex-row gap-6">
-              <div 
-                onClick={() => fileInputRef.current?.click()}
-                className="flex-1 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group p-8"
-              >
-                <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
-                  <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                </div>
-                <p className="text-xl font-bold text-slate-700 mb-2">上传照片</p>
-                <p className="text-slate-400 text-sm">点击选择或拖拽上传，支持多选</p>
-              </div>
+           {items.length === 0 ? (
+             <div className="h-full flex flex-col gap-6">
+               <div className="flex flex-col md:flex-row gap-6">
+                 <div 
+                   onClick={() => fileInputRef.current?.click()}
+                   className="flex-1 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all group p-8"
+                 >
+                   <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 mb-6 group-hover:scale-110 transition-transform">
+                     <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                     </svg>
+                   </div>
+                   <p className="text-xl font-bold text-slate-700 mb-2">上传照片</p>
+                   <p className="text-slate-400 text-sm">点击选择或拖拽上传，支持多选</p>
+                 </div>
+ 
+                 <div 
+                   onClick={openCamera}
+                   className="flex-1 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 transition-all group p-8"
+                 >
+                   <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
+                     <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
+                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                     </svg>
+                   </div>
+                   <p className="text-xl font-bold text-slate-700 mb-2">拍摄照片</p>
+                   <p className="text-slate-400 text-sm">使用摄像头直接拍摄并裁剪</p>
+                 </div>
+               </div>
 
-              <div 
-                onClick={openCamera}
-                className="flex-1 border-2 border-dashed border-slate-200 rounded-3xl flex flex-col items-center justify-center cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/30 transition-all group p-8"
-              >
-                <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mb-6 group-hover:scale-110 transition-transform">
-                  <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-                <p className="text-xl font-bold text-slate-700 mb-2">拍摄照片</p>
-                <p className="text-slate-400 text-sm">使用摄像头直接拍摄并裁剪</p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-              {items.map((item) => (
-                <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm">
+               <button
+                 type="button"
+                 onClick={addFromClipboard}
+                 disabled={isProcessing}
+                 className="w-full px-6 py-3 rounded-2xl border border-slate-200 text-slate-700 font-semibold hover:bg-white transition-colors disabled:opacity-50"
+               >
+                 来自剪贴板（Ctrl+V）
+               </button>
+             </div>
+           ) : (
+             <div className="flex flex-col gap-6">
+               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                 {items.map((item) => (
+                   <div key={item.id} className="relative group aspect-square rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 shadow-sm">
                   <img src={item.preview} className={`w-full h-full object-cover transition-all ${item.status === 'analyzing' ? 'scale-110 blur-[2px] opacity-50' : ''}`} />
                   
                   {/* Status Overlays */}
@@ -253,19 +337,29 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
               ))}
 
               {/* Add More Button in Grid */}
-              {!isProcessing && (
-                <div 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="aspect-square border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all text-slate-400 hover:text-indigo-600"
-                >
-                  <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
-                  </svg>
-                  <span className="text-xs font-bold">继续添加</span>
-                </div>
-              )}
-            </div>
-          )}
+               {!isProcessing && (
+                 <div 
+                   onClick={() => fileInputRef.current?.click()}
+                   className="aspect-square border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:border-indigo-400 hover:bg-indigo-50/30 transition-all text-slate-400 hover:text-indigo-600"
+                 >
+                   <svg className="w-8 h-8 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+                   </svg>
+                   <span className="text-xs font-bold">继续添加</span>
+                 </div>
+               )}
+             </div>
+
+             <button
+               type="button"
+               onClick={addFromClipboard}
+               disabled={isProcessing}
+               className="w-full px-6 py-3 rounded-2xl border border-slate-200 text-slate-700 font-semibold hover:bg-white transition-colors disabled:opacity-50"
+             >
+               来自剪贴板（Ctrl+V）
+             </button>
+           </div>
+           )}
         </div>
 
         {/* Footer Actions */}
