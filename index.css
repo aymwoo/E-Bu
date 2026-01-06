@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-/* KaTeX styles + fonts (served from /public/fonts). */
-@import "katex/dist/katex.min.css";
+/* KaTeX styles (local copy with /fonts URLs). */
+@import "./styles/katex.min.css";
 
 @font-face{font-display:block;font-family:KaTeX_AMS;font-style:normal;font-weight:400;src:url(/fonts/KaTeX_AMS-Regular.woff2) format("woff2"),url(/fonts/KaTeX_AMS-Regular.woff) format("woff"),url(/fonts/KaTeX_AMS-Regular.ttf) format("truetype")}
 @font-face{font-display:block;font-family:KaTeX_Caligraphic;font-style:normal;font-weight:700;src:url(/fonts/KaTeX_Caligraphic-Bold.woff2) format("woff2"),url(/fonts/KaTeX_Caligraphic-Bold.woff) format("woff"),url(/fonts/KaTeX_Caligraphic-Bold.ttf) format("truetype")}
