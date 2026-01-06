@@ -201,29 +201,94 @@ export const apiService = {
   },
 
   // Question Management
-  async fetchQuestions(): Promise<Question[]> {
-    const res = await fetch("/api/questions");
+  async fetchQuestions(params?: {
+    page?: number;
+    pageSize?: number;
+    tag?: string;
+    q?: string;
+    subject?: string;
+  }): Promise<
+    | Question[]
+    | {
+        items: Question[];
+        total: number;
+        page: number;
+        pageSize: number;
+      }
+  > {
+    const url = new URL("/api/questions", window.location.origin);
+    if (params?.page != null) url.searchParams.set("page", String(params.page));
+    if (params?.pageSize != null)
+      url.searchParams.set("pageSize", String(params.pageSize));
+    if (params?.tag) url.searchParams.set("tag", params.tag);
+    if (params?.q) url.searchParams.set("q", params.q);
+    if (params?.subject) url.searchParams.set("subject", params.subject);
+
+    const res = await fetch(url.toString().replace(window.location.origin, ""));
     if (!res.ok) throw new Error("Failed to fetch questions");
     const data = await res.json();
-    return data
-      .map(transformQuestionFromApi)
-      .sort(
-        (a: Question, b: Question) =>
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      );
+
+    if (Array.isArray(data)) {
+      return data
+        .map(transformQuestionFromApi)
+        .sort(
+          (a: Question, b: Question) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+    }
+
+    return {
+      items: (data.items || []).map(transformQuestionFromApi),
+      total: Number(data.total) || 0,
+      page: Number(data.page) || (params?.page ?? 1),
+      pageSize: Number(data.pageSize) || (params?.pageSize ?? 20),
+    };
   },
 
-  async fetchTrash(): Promise<Question[]> {
-    const res = await fetch("/api/trash");
+  async fetchTrash(params?: {
+    page?: number;
+    pageSize?: number;
+    tag?: string;
+    q?: string;
+    subject?: string;
+  }): Promise<
+    | Question[]
+    | {
+        items: Question[];
+        total: number;
+        page: number;
+        pageSize: number;
+      }
+  > {
+    const url = new URL("/api/trash", window.location.origin);
+    if (params?.page != null) url.searchParams.set("page", String(params.page));
+    if (params?.pageSize != null)
+      url.searchParams.set("pageSize", String(params.pageSize));
+    if (params?.tag) url.searchParams.set("tag", params.tag);
+    if (params?.q) url.searchParams.set("q", params.q);
+    if (params?.subject) url.searchParams.set("subject", params.subject);
+
+    const res = await fetch(url.toString().replace(window.location.origin, ""));
     if (!res.ok) throw new Error("Failed to fetch trash");
     const data = await res.json();
-    return data
-      .map(transformQuestionFromApi)
-      .sort(
-        (a: Question, b: Question) =>
-          new Date(b.deletedAt!).getTime() - new Date(a.deletedAt!).getTime()
-      );
+
+    if (Array.isArray(data)) {
+      return data
+        .map(transformQuestionFromApi)
+        .sort(
+          (a: Question, b: Question) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+    }
+
+    return {
+      items: (data.items || []).map(transformQuestionFromApi),
+      total: Number(data.total) || 0,
+      page: Number(data.page) || (params?.page ?? 1),
+      pageSize: Number(data.pageSize) || (params?.pageSize ?? 20),
+    };
   },
+
 
   async createQuestion(
     data: Omit<Question, "id" | "createdAt">

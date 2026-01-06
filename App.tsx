@@ -1,5 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
+
+const useDebouncedValue = <T,>(value: T, delayMs: number): T => {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return debounced;
+};
 import { Question, Subject, AIConfig } from './types';
 import { apiService } from './services/apiService';
 import QuestionCard from './components/QuestionCard';
@@ -29,8 +38,19 @@ const App: React.FC = () => {
   const [isShowingHelp, setIsShowingHelp] = useState(false);
   const [isShowingSettings, setIsShowingSettings] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 300);
   const [viewMode, setViewMode] = useState<'CARD' | 'LIST'>('CARD');
-  
+
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(() => {
+    const raw = window.localStorage.getItem('pageSize');
+    const parsed = raw ? Number(raw) : 20;
+    if (![10, 20, 50, 100].includes(parsed)) return 20;
+    return parsed;
+  });
+  const [total, setTotal] = useState(0);
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null);
@@ -43,17 +63,61 @@ const App: React.FC = () => {
 
   useEffect(() => {
     loadData();
+  }, [activeTab, page, selectedTag, pageSize, debouncedSearchQuery, selectedSubject]);
+
+  useEffect(() => {
+    // Switching tabs should reset paging.
+    setPage(1);
   }, [activeTab]);
+
+  useEffect(() => {
+    // Persist paging preference.
+    window.localStorage.setItem('pageSize', String(pageSize));
+  }, [pageSize]);
+
+  useEffect(() => {
+    // Changing filters should reset paging.
+    setPage(1);
+  }, [selectedTag, debouncedSearchQuery, selectedSubject, pageSize]);
 
   const loadData = async () => {
     setIsLoading(true);
     try {
       if (activeTab === 'LIBRARY') {
-        const data = await apiService.fetchQuestions();
-        setQuestions(data);
+        // Ensure badge count reflects trash, not library.
+        const trashRes = await apiService.fetchTrash({ page: 1, pageSize: 1 });
+        if (!Array.isArray(trashRes)) setTrashQuestions([]);
+
+        const res = await apiService.fetchQuestions({
+          page,
+          pageSize,
+          tag: selectedTag || undefined,
+          q: debouncedSearchQuery || undefined,
+          subject: selectedSubject === 'ALL' ? undefined : selectedSubject,
+        });
+        if (Array.isArray(res)) {
+          setQuestions(res);
+          setTotal(res.length);
+        } else {
+          setQuestions(res.items);
+          setTotal(res.total);
+        }
       } else {
-        const data = await apiService.fetchTrash();
-        setTrashQuestions(data);
+        const res = await apiService.fetchTrash({
+          page,
+          pageSize,
+          tag: selectedTag || undefined,
+          q: debouncedSearchQuery || undefined,
+          subject: selectedSubject === 'ALL' ? undefined : selectedSubject,
+        });
+
+        if (Array.isArray(res)) {
+          setTrashQuestions(res);
+          setTotal(res.length);
+        } else {
+          setTrashQuestions(res.items);
+          setTotal(res.total);
+        }
       }
       setSelectedIds(new Set());
     } catch (e) {
@@ -151,9 +215,20 @@ const App: React.FC = () => {
 
   const filteredQuestions = currentQuestions.filter(q => {
     const matchesSubject = selectedSubject === 'ALL' || q.subject === selectedSubject;
-    const matchesSearch = q.content.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          q.knowledgePoints.some(kp => kp.toLowerCase().includes(searchQuery.toLowerCase()));
-    return matchesSubject && matchesSearch;
+    // Search/tag/subject are applied server-side in paged mode; keep client-side
+    // filtering for legacy array responses.
+    const matchesSearch =
+      !debouncedSearchQuery ||
+      q.content.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      q.analysis.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      q.learningGuide.toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      (q.answer || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      (q.diagramDescription || '').toLowerCase().includes(debouncedSearchQuery.toLowerCase()) ||
+      (q.options || []).some((opt) => opt.toLowerCase().includes(debouncedSearchQuery.toLowerCase())) ||
+      q.knowledgePoints.some((kp) => kp.toLowerCase().includes(debouncedSearchQuery.toLowerCase()));
+
+    const matchesTag = !selectedTag || q.knowledgePoints.includes(selectedTag);
+    return matchesSubject && matchesSearch && matchesTag;
   });
 
   const getSelectedQuestions = () => {
@@ -250,8 +325,20 @@ const App: React.FC = () => {
               placeholder={`在${activeTab === 'LIBRARY' ? '错题库' : '回收站'}中搜索...`}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 md:pl-10 pr-4 py-2 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all text-sm"
+              className={`w-full pl-9 md:pl-10 ${searchQuery ? 'pr-10' : 'pr-4'} py-2 bg-slate-100 border-none rounded-xl focus:ring-2 focus:ring-indigo-500 transition-all text-sm`}
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-200/60 transition"
+                title="清空搜索"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
             <svg className="w-4 h-4 md:w-5 md:h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -306,11 +393,12 @@ const App: React.FC = () => {
               <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
               </svg>
-              {activeTab === 'LIBRARY' && trashQuestions.length > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full font-bold">
-                  {trashQuestions.length}
-                </span>
-              )}
+               {activeTab === 'LIBRARY' && total > 0 && (
+                 <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] flex items-center justify-center rounded-full font-bold">
+                   {total}
+                 </span>
+               )}
+
             </button>
 
             <button 
@@ -336,20 +424,55 @@ const App: React.FC = () => {
       <main className="flex-1 max-w-7xl w-full mx-auto p-6">
         <div className="mb-8 flex items-center justify-between">
            <div>
-              <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-                {activeTab === 'LIBRARY' ? '错题库' : '回收站'}
-                <span className="text-slate-300 font-light">/</span>
-                <span className="text-sm font-bold text-slate-400">{filteredQuestions.length} 道题目</span>
-              </h2>
+               <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+                 {activeTab === 'LIBRARY' ? '错题库' : '回收站'}
+                 {selectedTag && (
+                   <>
+                     <span className="text-slate-300 font-light">/</span>
+                     <span className="text-sm font-black text-indigo-600">#{selectedTag}</span>
+                     <button
+                       onClick={() => {
+                         setSelectedTag(null);
+                         setPage(1);
+                       }}
+                       className="text-[10px] font-black text-slate-400 hover:text-slate-600 bg-white border border-slate-200 rounded-full px-2 py-1"
+                       title="清除标签筛选"
+                     >
+                       清除
+                     </button>
+                   </>
+                 )}
+                 <span className="text-slate-300 font-light">/</span>
+                  <span className="text-sm font-bold text-slate-400">{total > 0 ? total : filteredQuestions.length} 道题目</span>
+
+               </h2>
+
            </div>
         </div>
 
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
           <div className="flex items-center gap-4 overflow-x-auto pb-2 scrollbar-hide">
             <div className="flex gap-2">
-              <button onClick={() => setSelectedSubject('ALL')} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${selectedSubject === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500'}`}>全部</button>
+              <button
+                onClick={() => {
+                  setSelectedSubject('ALL');
+                  setPage(1);
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${selectedSubject === 'ALL' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500'}`}
+              >
+                全部
+              </button>
               {Object.values(Subject).map(sub => (
-                <button key={sub} onClick={() => setSelectedSubject(sub)} className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${selectedSubject === sub ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500'}`}>{sub}</button>
+                <button
+                  key={sub}
+                  onClick={() => {
+                    setSelectedSubject(sub);
+                    setPage(1);
+                  }}
+                  className={`px-4 py-2 rounded-full text-sm font-semibold transition-all ${selectedSubject === sub ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500'}`}
+                >
+                  {sub}
+                </button>
               ))}
             </div>
           </div>
@@ -411,18 +534,24 @@ const App: React.FC = () => {
           viewMode === 'CARD' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 pb-24">
               {filteredQuestions.map(q => (
-                <QuestionCard 
-                  key={q.id} 
-                  question={q} 
-                  isSelected={selectedIds.has(q.id)}
-                  onToggleSelect={() => toggleSelect(q.id)}
-                  onDelete={activeTab === 'TRASH' ? hardDeleteQuestion : deleteQuestion}
-                  onRestore={restoreQuestion}
-                  onView={setActiveQuestion}
-                  onEdit={setEditingQuestion}
-                  onUpdateDifficulty={updateQuestionDifficulty}
-                  isTrashMode={activeTab === 'TRASH'}
-                />
+                  <QuestionCard 
+                    key={q.id} 
+                    question={q} 
+                    isSelected={selectedIds.has(q.id)}
+                    onToggleSelect={() => toggleSelect(q.id)}
+                    onDelete={activeTab === 'TRASH' ? hardDeleteQuestion : deleteQuestion}
+                    onRestore={restoreQuestion}
+                    onView={setActiveQuestion}
+                    onEdit={setEditingQuestion}
+                    onUpdateDifficulty={updateQuestionDifficulty}
+                    onSelectKnowledgePoint={(kp) => {
+                      setSelectedTag(kp);
+                      setPage(1);
+                      setActiveTab('LIBRARY');
+                    }}
+                    isTrashMode={activeTab === 'TRASH'}
+                  />
+
               ))}
             </div>
           ) : (
@@ -451,6 +580,11 @@ const App: React.FC = () => {
                         onView={setActiveQuestion}
                         onEdit={setEditingQuestion}
                         onUpdateDifficulty={updateQuestionDifficulty}
+                        onSelectKnowledgePoint={(kp) => {
+                          setSelectedTag(kp);
+                          setPage(1);
+                          setActiveTab('LIBRARY');
+                        }}
                         isTrashMode={activeTab === 'TRASH'}
                       />
                     ))}
@@ -462,7 +596,58 @@ const App: React.FC = () => {
         ) : (
           <div className="text-center py-24">暂无题目</div>
         )}
+
+        {!isLoading && (
+          <div className="flex items-center justify-between gap-4 mt-6 pb-6">
+            <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
+              <span>
+                第 {page} / {Math.max(1, Math.ceil(total / pageSize))} 页，共 {total} 道
+              </span>
+              <label className="flex items-center gap-2">
+                <span>每页</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => setPageSize(Number(e.target.value) || 20)}
+                  className="px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-600"
+                >
+                  {[10, 20, 50, 100].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || total <= pageSize}
+                className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
+                  page <= 1
+                    ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                上一页
+              </button>
+              <button
+                onClick={() =>
+                  setPage((p) => Math.min(Math.max(1, Math.ceil(total / pageSize)), p + 1))
+                }
+                disabled={page >= Math.max(1, Math.ceil(total / pageSize)) || total <= pageSize}
+                className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
+                  page >= Math.max(1, Math.ceil(total / pageSize))
+                    ? 'bg-slate-50 text-slate-300 border-slate-200 cursor-not-allowed'
+                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                下一页
+              </button>
+            </div>
+          </div>
+        )}
       </main>
+
 
       {selectedIds.size > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-6 animate-in slide-in-from-bottom-10 fade-in duration-300">

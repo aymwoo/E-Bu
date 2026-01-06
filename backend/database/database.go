@@ -92,10 +92,119 @@ func (db *DB) GetQuestions() ([]models.Question, error) {
 	return questions, result.Error
 }
 
+type PagedQuestions struct {
+	Items    []models.Question `json:"items"`
+	Total    int64             `json:"total"`
+	Page     int               `json:"page"`
+	PageSize int               `json:"pageSize"`
+}
+
+func (db *DB) GetQuestionsPaged(tag string, page int, pageSize int) (*PagedQuestions, error) {
+	return db.GetQuestionsPagedFiltered(tag, "", "", page, pageSize)
+}
+
+func (db *DB) GetQuestionsPagedFiltered(tag string, query string, subject string, page int, pageSize int) (*PagedQuestions, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	base := db.Model(&models.Question{}).Where("deleted_at IS NULL")
+	if tag != "" {
+		// knowledge_points is stored as JSON string, so match by substring.
+		// Stored form is like ["tag1","tag2"], so we search for "tag".
+		base = base.Where("knowledge_points LIKE ?", "%\""+tag+"\"%")
+	}
+	if subject != "" {
+		base = base.Where("subject = ?", subject)
+	}
+	if query != "" {
+		like := "%" + query + "%"
+		base = base.Where(
+			"content LIKE ? OR analysis LIKE ? OR learning_guide LIKE ? OR diagram_description LIKE ? OR answer LIKE ? OR options LIKE ? OR knowledge_points LIKE ?",
+			like,
+			like,
+			like,
+			like,
+			like,
+			like,
+			like,
+		)
+	}
+
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	var questions []models.Question
+	offset := (page - 1) * pageSize
+	if err := base.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&questions).Error; err != nil {
+		return nil, err
+	}
+
+	return &PagedQuestions{Items: questions, Total: total, Page: page, PageSize: pageSize}, nil
+}
+
 func (db *DB) GetTrash() ([]models.Question, error) {
 	var questions []models.Question
 	result := db.Where("deleted_at IS NOT NULL").Order("deleted_at DESC").Find(&questions)
 	return questions, result.Error
+}
+
+func (db *DB) GetTrashPaged(tag string, page int, pageSize int) (*PagedQuestions, error) {
+	return db.GetTrashPagedFiltered(tag, "", "", page, pageSize)
+}
+
+func (db *DB) GetTrashPagedFiltered(tag string, query string, subject string, page int, pageSize int) (*PagedQuestions, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+	if pageSize > 100 {
+		pageSize = 100
+	}
+
+	base := db.Model(&models.Question{}).Where("deleted_at IS NOT NULL")
+	if tag != "" {
+		base = base.Where("knowledge_points LIKE ?", "%\""+tag+"\"%")
+	}
+	if subject != "" {
+		base = base.Where("subject = ?", subject)
+	}
+	if query != "" {
+		like := "%" + query + "%"
+		base = base.Where(
+			"content LIKE ? OR analysis LIKE ? OR learning_guide LIKE ? OR diagram_description LIKE ? OR answer LIKE ? OR options LIKE ? OR knowledge_points LIKE ?",
+			like,
+			like,
+			like,
+			like,
+			like,
+			like,
+			like,
+		)
+	}
+
+	var total int64
+	if err := base.Count(&total).Error; err != nil {
+		return nil, err
+	}
+
+	var questions []models.Question
+	offset := (page - 1) * pageSize
+	if err := base.Order("deleted_at DESC").Offset(offset).Limit(pageSize).Find(&questions).Error; err != nil {
+		return nil, err
+	}
+
+	return &PagedQuestions{Items: questions, Total: total, Page: page, PageSize: pageSize}, nil
 }
 
 func (db *DB) GetQuestionByID(id string) (*models.Question, error) {

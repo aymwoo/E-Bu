@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"time"
 
 	"E-Bu-backend/database"
@@ -20,24 +21,60 @@ func NewQuestionHandler(db *database.DB) *QuestionHandler {
 	return &QuestionHandler{DB: db}
 }
 
-// GetQuestions retrieves all non-deleted questions
+// GetQuestions retrieves non-deleted questions (supports paging + tag filter)
 func (h *QuestionHandler) GetQuestions(c *gin.Context) {
-	questions, err := h.DB.GetQuestions()
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+	tag := c.Query("tag")
+	q := c.Query("q")
+	subject := c.Query("subject")
+
+	// Backward compatible: if no paging params are provided and no filters,
+	// return the legacy array response.
+	if c.Query("page") == "" && c.Query("pageSize") == "" && tag == "" && q == "" && subject == "" {
+		questions, err := h.DB.GetQuestions()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch questions"})
+			return
+		}
+		c.JSON(http.StatusOK, questions)
+		return
+	}
+
+	paged, err := h.DB.GetQuestionsPagedFiltered(tag, q, subject, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch questions"})
 		return
 	}
-	c.JSON(http.StatusOK, questions)
+	c.JSON(http.StatusOK, paged)
 }
 
-// GetTrash retrieves all deleted questions
+// GetTrash retrieves deleted questions (supports paging + tag filter)
 func (h *QuestionHandler) GetTrash(c *gin.Context) {
-	questions, err := h.DB.GetTrash()
+	page, _ := strconv.Atoi(c.Query("page"))
+	pageSize, _ := strconv.Atoi(c.Query("pageSize"))
+	tag := c.Query("tag")
+	q := c.Query("q")
+	subject := c.Query("subject")
+
+	// Backward compatible: if no paging params are provided and no filters,
+	// return the legacy array response.
+	if c.Query("page") == "" && c.Query("pageSize") == "" && tag == "" && q == "" && subject == "" {
+		questions, err := h.DB.GetTrash()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch trash"})
+			return
+		}
+		c.JSON(http.StatusOK, questions)
+		return
+	}
+
+	paged, err := h.DB.GetTrashPagedFiltered(tag, q, subject, page, pageSize)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch trash"})
 		return
 	}
-	c.JSON(http.StatusOK, questions)
+	c.JSON(http.StatusOK, paged)
 }
 
 // CreateQuestion creates a new question

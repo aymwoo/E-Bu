@@ -94,6 +94,8 @@ func main() {
 	} else {
 		// Serve assets directory for JS/CSS files
 		r.Static("/assets", filepath.Join(staticDir, "assets"))
+		// Serve fonts and other static folders
+		r.Static("/fonts", filepath.Join(staticDir, "fonts"))
 		// Serve other static files from root
 		r.StaticFile("/gitee.ico", filepath.Join(staticDir, "gitee.ico"))
 		r.StaticFile("/screenshot.png", filepath.Join(staticDir, "screenshot.png"))
