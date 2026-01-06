@@ -47,7 +47,7 @@ const ANALYSIS_SCHEMA = {
 // 导出的默认提示词，供设置页面恢复使用
 export const DEFAULT_SYSTEM_PROMPT = `你是一个中学错题解析专家。请识别图片中的题目并提取结构化信息。
 要求：
-1. 提取题干、选项、图解描述、答案、解析、建议、知识点、学科和难度。
+1. 提取题干、选项、图解描述、答案、解析、建议、知识点、学科和难度，注意区分不同的试题类型，填空题，选择题，解答题等等，只有选择题才有选项，原图题目的答案可能是错误的，不要受原题答案影响，只根据题干进行解析。
 2. 所有公式、符号、化学式必须使用 LaTeX 包装，使用美元符号格式 $...$ 或 $$...$$。
 3. 返回严格的 JSON 格式，字段名必须使用英文：content, options, diagramDescription, answer, analysis, learningGuide, knowledgePoints, subject, difficulty。
    - options 字段必须是简单的字符串数组，例如 ["A. 选项内容", "B. 选项内容"]，绝对不要使用对象结构。
@@ -174,13 +174,13 @@ function cleanAndParseJSON(content: string): GeminiAnalysisResponse {
       try {
         let sanitized = fixedContent.replace(
           /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,
-          ""
+          "",
         );
         return JSON.parse(sanitized);
       } catch (thirdError) {
         console.error(
           "JSON parsing failed after all cleanup attempts:",
-          content.substring(0, 500)
+          content.substring(0, 500),
         );
         throw new Error(`JSON 解析失败: ${(firstError as Error).message}`);
       }
@@ -194,7 +194,7 @@ function cleanAndParseJSON(content: string): GeminiAnalysisResponse {
 async function analyzeWithGemini(
   base64Image: string,
   config: ActiveProviderConfig,
-  prompt: string
+  prompt: string,
 ): Promise<GeminiAnalysisResponse> {
   if (!config.apiKey) throw new Error("API Key 未设置");
   const ai = new GoogleGenAI({ apiKey: config.apiKey });
@@ -233,7 +233,7 @@ async function analyzeWithGemini(
 async function analyzeWithOpenAICompatible(
   base64Image: string,
   config: ActiveProviderConfig,
-  prompt: string
+  prompt: string,
 ): Promise<GeminiAnalysisResponse> {
   let baseUrl = config.baseUrl;
   let model = config.modelName || "gpt-4o";
@@ -245,7 +245,7 @@ async function analyzeWithOpenAICompatible(
     baseUrl = baseUrl || "https://ark.cn-beijing.volces.com/api/v3";
     if (!config.modelName?.trim()) {
       throw new Error(
-        "豆包需要配置推理接入点ID (ep-xxxxxxxxxx)，请在火山引擎 Ark 控制台创建接入点后填写。"
+        "豆包需要配置推理接入点ID (ep-xxxxxxxxxx)，请在火山引擎 Ark 控制台创建接入点后填写。",
       );
     }
     model = config.modelName.trim();
@@ -344,7 +344,7 @@ async function analyzeWithOpenAICompatible(
  * Test AI Configuration
  */
 export const testAIConfig = async (
-  config: ActiveProviderConfig
+  config: ActiveProviderConfig,
 ): Promise<boolean> => {
   const testPrompt = "请回复'测试成功'，仅回复这四个字，不要有任何其他内容。";
 
@@ -423,7 +423,7 @@ export const testAIConfig = async (
  */
 export const analyzeQuestionImage = async (
   base64Image: string,
-  config: ActiveProviderConfig
+  config: ActiveProviderConfig,
 ): Promise<GeminiAnalysisResponse> => {
   const finalPrompt = config.systemPrompt || DEFAULT_SYSTEM_PROMPT;
   const prompt = config.systemPrompt || DEFAULT_SYSTEM_PROMPT;
@@ -444,7 +444,7 @@ export const analyzeQuestionImage = async (
       return await analyzeWithOpenAICompatible(
         compressedImage,
         config,
-        finalPrompt
+        finalPrompt,
       );
     }
   } catch (e) {
