@@ -115,5 +115,21 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("Server starting on port %s", port)
+
+	certFile := os.Getenv("CERT_FILE")
+	keyFile := os.Getenv("KEY_FILE")
+
+	if certFile != "" && keyFile != "" {
+		if _, err := os.Stat(certFile); err == nil {
+			if _, err := os.Stat(keyFile); err == nil {
+				log.Printf("Starting HTTPS server using cert: %s", certFile)
+				if err := r.RunTLS(":"+port, certFile, keyFile); err != nil {
+					log.Fatal("Failed to start HTTPS server:", err)
+				}
+				return
+			}
+		}
+	}
+
 	r.Run(":" + port)
 }
