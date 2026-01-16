@@ -114,6 +114,25 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+
+	certFile := os.Getenv("TLS_CERT")
+	keyFile := os.Getenv("TLS_KEY")
+
 	log.Printf("Server starting on port %s", port)
-	r.Run(":" + port)
+	if certFile != "" && keyFile != "" {
+		if _, err := os.Stat(certFile); err == nil {
+			if _, err := os.Stat(keyFile); err == nil {
+				log.Printf("TLS/SSL enabled using cert: %s and key: %s", certFile, keyFile)
+				r.RunTLS(":"+port, certFile, keyFile)
+			} else {
+				log.Printf("TLS key file not found at %s, falling back to HTTP", keyFile)
+				r.Run(":" + port)
+			}
+		} else {
+			log.Printf("TLS cert file not found at %s, falling back to HTTP", certFile)
+			r.Run(":" + port)
+		}
+	} else {
+		r.Run(":" + port)
+	}
 }

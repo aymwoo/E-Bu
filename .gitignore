@@ -26,3 +26,8 @@ bun.lock
 .env
 backend/main.exe
 RELEASE_NOTES.md
+
+# Certificates
+certs/*.crt
+certs/*.key
+certs/*.pem
