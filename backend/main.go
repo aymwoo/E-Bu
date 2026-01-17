@@ -115,5 +115,23 @@ func main() {
 		port = "8080"
 	}
 	log.Printf("Server starting on port %s", port)
+
+	// Check for TLS certificates
+	tlsCert := os.Getenv("TLS_CERT")
+	tlsKey := os.Getenv("TLS_KEY")
+
+	if tlsCert != "" && tlsKey != "" {
+		if _, err := os.Stat(tlsCert); err == nil {
+			if _, err := os.Stat(tlsKey); err == nil {
+				log.Printf("Starting server with TLS support")
+				if err := r.RunTLS(":"+port, tlsCert, tlsKey); err != nil {
+					log.Fatal("Failed to start TLS server: ", err)
+				}
+				return
+			}
+		}
+		log.Printf("TLS certificates not found, falling back to HTTP")
+	}
+
 	r.Run(":" + port)
 }

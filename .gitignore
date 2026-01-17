@@ -24,5 +24,7 @@ dist-ssr
 data/ebu.db
 bun.lock
 .env
+backend/main
 backend/main.exe
 RELEASE_NOTES.md
+certs/

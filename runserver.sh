@@ -47,10 +47,30 @@ export GIN_MODE=release
 export CGO_ENABLED=1
 export GOPROXY=https://goproxy.cn,direct
 
+# Check for certificates
+if [ -f "../certs/server.crt" ] && [ -f "../certs/server.key" ]; then
+    echo -e "${GREEN}TLS Certificates found. Enabling HTTPS.${NC}"
+    export TLS_CERT="../certs/server.crt"
+    export TLS_KEY="../certs/server.key"
+    PROTOCOL="https"
+else
+    # Try to generate them if possible
+    if [ -f "../generate_cert.sh" ]; then
+        echo "Generating certificates..."
+        (cd .. && ./generate_cert.sh)
+        export TLS_CERT="../certs/server.crt"
+        export TLS_KEY="../certs/server.key"
+        PROTOCOL="https"
+    else
+        echo "No certificates found. Running in HTTP mode."
+        PROTOCOL="http"
+    fi
+fi
+
 echo "Downloading Go dependencies..."
 go mod download
 
-echo "Server starting at http://localhost:8080"
+echo "Server starting at ${PROTOCOL}://localhost:8080"
 echo "Press Ctrl+C to stop."
 
 go run main.go
