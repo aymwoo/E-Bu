@@ -35,6 +35,12 @@ fi
 # Create data directory if not exists
 mkdir -p data
 
+# Ensure certificates exist
+if [ -f "./generate_cert.sh" ]; then
+    chmod +x ./generate_cert.sh
+    ./generate_cert.sh
+fi
+
 # Start Backend
 echo -e "${GREEN}[2/2] Starting Backend Server...${NC}"
 cd backend
@@ -43,6 +49,8 @@ cd backend
 export DB_PATH="../data/ebu.db"
 export STATIC_DIR="../dist"
 export PORT=8080
+export TLS_CERT="../certs/server.crt"
+export TLS_KEY="../certs/server.key"
 export GIN_MODE=release
 export CGO_ENABLED=1
 export GOPROXY=https://goproxy.cn,direct
@@ -50,7 +58,7 @@ export GOPROXY=https://goproxy.cn,direct
 echo "Downloading Go dependencies..."
 go mod download
 
-echo "Server starting at http://localhost:8080"
+echo "Server starting at https://localhost:8080"
 echo "Press Ctrl+C to stop."
 
 go run main.go
