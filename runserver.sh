@@ -35,6 +35,10 @@ fi
 # Create data directory if not exists
 mkdir -p data
 
+# Ensure certificates exist
+chmod +x generate_cert.sh
+./generate_cert.sh
+
 # Start Backend
 echo -e "${GREEN}[2/2] Starting Backend Server...${NC}"
 cd backend
@@ -46,11 +50,14 @@ export PORT=8080
 export GIN_MODE=release
 export CGO_ENABLED=1
 export GOPROXY=https://goproxy.cn,direct
+export TLS_CERT="../certs/server.crt"
+export TLS_KEY="../certs/server.key"
 
 echo "Downloading Go dependencies..."
 go mod download
 
-echo "Server starting at http://localhost:8080"
+echo "Server starting at https://localhost:8080"
+echo "Note: You will need to accept the self-signed certificate warning."
 echo "Press Ctrl+C to stop."
 
 go run main.go
