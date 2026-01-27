@@ -64,6 +64,9 @@ $env:PORT = "8080"
 $env:GIN_MODE = "release"
 $env:CGO_ENABLED = "1"
 $env:GOPROXY = "https://goproxy.cn,direct"
+# Enable TLS (certs will be generated if missing)
+$env:TLS_CERT = "..\certs\server.crt"
+$env:TLS_KEY = "..\certs\server.key"
 
 Write-Host "Downloading Go dependencies..."
 
@@ -71,7 +74,7 @@ Push-Location $backendDir
 try {
   go mod download
 
-  Write-Host "Server starting at http://localhost:8080"
+  Write-Host "Server starting at https://localhost:8080"
   Write-Host "Press Ctrl+C to stop."
 
   go run main.go

@@ -1,9 +1,17 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"log"
+	"math/big"
+	"net"
 	"os"
 	"path/filepath"
+	"time"
 
 	"E-Bu-backend/database"
 	"E-Bu-backend/handlers"
@@ -114,6 +122,88 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Server starting on port %s", port)
+
+	certFile := os.Getenv("TLS_CERT")
+	keyFile := os.Getenv("TLS_KEY")
+
+	if certFile != "" && keyFile != "" {
+		if err := ensureCert(certFile, keyFile); err != nil {
+			log.Printf("Failed to generate/check certificates: %v", err)
+		} else {
+			log.Printf("Server starting on port %s (HTTPS)", port)
+			// RunTLS is blocking
+			if err := r.RunTLS(":"+port, certFile, keyFile); err != nil {
+				log.Fatalf("Failed to start HTTPS server: %v", err)
+			}
+			return
+		}
+	}
+
+	log.Printf("Server starting on port %s (HTTP)", port)
 	r.Run(":" + port)
+}
+
+func ensureCert(certFile, keyFile string) error {
+	// Check if files exist
+	if _, err := os.Stat(certFile); err == nil {
+		if _, err := os.Stat(keyFile); err == nil {
+			return nil // Both exist
+		}
+	}
+
+	log.Println("Generating self-signed certificate...")
+
+	// Ensure directory exists
+	if err := os.MkdirAll(filepath.Dir(certFile), 0755); err != nil {
+		return err
+	}
+
+	// Generate key
+	priv, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return err
+	}
+
+	// Template
+	template := x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject: pkix.Name{
+			Organization: []string{"E-Bu Local"},
+		},
+		NotBefore: time.Now(),
+		NotAfter:  time.Now().Add(365 * 24 * time.Hour),
+
+		KeyUsage:              x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		BasicConstraintsValid: true,
+	}
+
+	// Add localhost IPs
+	template.IPAddresses = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	template.DNSNames    = []string{"localhost"}
+
+	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
+	if err != nil {
+		return err
+	}
+
+	// Write cert
+	certOut, err := os.Create(certFile)
+	if err != nil {
+		return err
+	}
+	pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes})
+	certOut.Close()
+
+	// Write key
+	keyOut, err := os.Create(keyFile)
+	if err != nil {
+		return err
+	}
+	privBytes := x509.MarshalPKCS1PrivateKey(priv)
+	pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privBytes})
+	keyOut.Close()
+
+	log.Println("Certificate generated.")
+	return nil
 }

@@ -37,6 +37,7 @@ mkdir -p data
 
 # Start Backend
 echo -e "${GREEN}[2/2] Starting Backend Server...${NC}"
+
 cd backend
 
 # Set environment variables
@@ -46,11 +47,14 @@ export PORT=8080
 export GIN_MODE=release
 export CGO_ENABLED=1
 export GOPROXY=https://goproxy.cn,direct
+# Enable TLS (certs will be generated if missing)
+export TLS_CERT="../certs/server.crt"
+export TLS_KEY="../certs/server.key"
 
 echo "Downloading Go dependencies..."
 go mod download
 
-echo "Server starting at http://localhost:8080"
+echo "Server starting at https://localhost:8080"
 echo "Press Ctrl+C to stop."
 
 go run main.go

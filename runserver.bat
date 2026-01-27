@@ -61,6 +61,7 @@ if not exist data mkdir data
 
 REM Start Backend
 echo [2/2] Starting Backend Server...
+
 cd backend
 
 set "DB_PATH=..\data\ebu.db"
@@ -69,11 +70,14 @@ set "PORT=8080"
 set "GIN_MODE=release"
 set "CGO_ENABLED=1"
 set "GOPROXY=https://goproxy.cn,direct"
+REM Enable TLS (certs will be generated if missing)
+set "TLS_CERT=..\certs\server.crt"
+set "TLS_KEY=..\certs\server.key"
 
 echo Downloading Go dependencies...
 go mod download
 
-echo Server starting at http://localhost:8080
+echo Server starting at https://localhost:8080
 echo Press Ctrl+C to stop.
 
 go run main.go
