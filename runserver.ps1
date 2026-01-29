@@ -54,6 +54,12 @@ if (-not (Test-Path -Path $dataDir)) {
   New-Item -ItemType Directory -Path $dataDir | Out-Null
 }
 
+# Create certs directory
+$certsDir = Join-Path $PSScriptRoot 'certs'
+if (-not (Test-Path -Path $certsDir)) {
+  New-Item -ItemType Directory -Path $certsDir | Out-Null
+}
+
 # Start backend
 Write-Info "[2/2] Starting Backend Server..."
 $backendDir = Join-Path $PSScriptRoot 'backend'
@@ -64,6 +70,8 @@ $env:PORT = "8080"
 $env:GIN_MODE = "release"
 $env:CGO_ENABLED = "1"
 $env:GOPROXY = "https://goproxy.cn,direct"
+$env:TLS_CERT = "..\certs\server.crt"
+$env:TLS_KEY = "..\certs\server.key"
 
 Write-Host "Downloading Go dependencies..."
 
@@ -71,10 +79,10 @@ Push-Location $backendDir
 try {
   go mod download
 
-  Write-Host "Server starting at http://localhost:8080"
+  Write-Host "Server starting at https://localhost:8080"
   Write-Host "Press Ctrl+C to stop."
 
-  go run main.go
+  go run main.go tls.go
 } finally {
   Pop-Location
 }

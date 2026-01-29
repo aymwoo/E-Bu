@@ -58,6 +58,7 @@ if exist dist (
 
 REM Create data directory
 if not exist data mkdir data
+if not exist certs mkdir certs
 
 REM Start Backend
 echo [2/2] Starting Backend Server...
@@ -69,13 +70,15 @@ set "PORT=8080"
 set "GIN_MODE=release"
 set "CGO_ENABLED=1"
 set "GOPROXY=https://goproxy.cn,direct"
+set "TLS_CERT=..\certs\server.crt"
+set "TLS_KEY=..\certs\server.key"
 
 echo Downloading Go dependencies...
 go mod download
 
-echo Server starting at http://localhost:8080
+echo Server starting at https://localhost:8080
 echo Press Ctrl+C to stop.
 
-go run main.go
+go run main.go tls.go
 
 endlocal
