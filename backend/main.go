@@ -114,6 +114,19 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Server starting on port %s", port)
-	r.Run(":" + port)
+
+	certFile := os.Getenv("TLS_CERT")
+	keyFile := os.Getenv("TLS_KEY")
+
+	if certFile != "" && keyFile != "" {
+		log.Printf("TLS configuration found. Checking certificates...")
+		if err := EnsureCert(certFile, keyFile); err != nil {
+			log.Fatalf("Failed to generate/load certificates: %v", err)
+		}
+		log.Printf("Server starting on port %s (HTTPS)", port)
+		r.RunTLS(":"+port, certFile, keyFile)
+	} else {
+		log.Printf("Server starting on port %s (HTTP)", port)
+		r.Run(":" + port)
+	}
 }
