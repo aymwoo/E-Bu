@@ -32,8 +32,9 @@ else
     echo "Frontend build found. Skipping rebuild. Use --rebuild to force update."
 fi
 
-# Create data directory if not exists
+# Create data and certs directory if not exists
 mkdir -p data
+mkdir -p certs
 
 # Start Backend
 echo -e "${GREEN}[2/2] Starting Backend Server...${NC}"
@@ -42,6 +43,8 @@ cd backend
 # Set environment variables
 export DB_PATH="../data/ebu.db"
 export STATIC_DIR="../dist"
+export TLS_CERT="../certs/server.crt"
+export TLS_KEY="../certs/server.key"
 export PORT=8080
 export GIN_MODE=release
 export CGO_ENABLED=1
@@ -50,7 +53,7 @@ export GOPROXY=https://goproxy.cn,direct
 echo "Downloading Go dependencies..."
 go mod download
 
-echo "Server starting at http://localhost:8080"
+echo "Server starting at https://localhost:8080"
 echo "Press Ctrl+C to stop."
 
-go run main.go
+go run .
