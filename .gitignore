@@ -26,3 +26,5 @@ bun.lock
 .env
 backend/main.exe
 RELEASE_NOTES.md
+certs/
+backend/E-Bu-backend
