@@ -4,6 +4,12 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本号使用日历版本（CalVer）：`YYYYMMDD`。
 
+## [20260223] - 2026-02-23
+
+### 新增
+- 后端新增 HTTPS 支持，并可自动生成自签名证书。
+- 优化开发环境配置：更新 Vite 代理规则及 `runserver.sh` 脚本，适配安全的 HTTPS 通信。
+
 ## [20260106] - 2026-01-06
 
 ### 新增
@@ -22,5 +28,6 @@
 - 支持题目图片展示与裁剪提取关键图/图例。
 - 支持知识点标签管理，便于结构化复习。
 
+[20260223]: https://github.com/aymwoo/E-Bu/releases/tag/20260223
 [20260106]: https://github.com/aymwoo/E-Bu/releases/tag/20260106
 [20260105]: https://github.com/aymwoo/E-Bu/releases/tag/20260105
