@@ -6,7 +6,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"log"
+	"fmt"
 	"math/big"
 	"net"
 	"os"
@@ -14,42 +14,46 @@ import (
 	"time"
 )
 
-// EnsureCert checks if the certificate and key exist; if not, it generates them.
-func EnsureCert(certFile, keyFile string) error {
-	if _, err := os.Stat(certFile); err == nil {
-		if _, err := os.Stat(keyFile); err == nil {
-			return nil // Both exist
-		}
+// ensureCert ensures that the certificate and private key exist at the given paths.
+// If they don't exist, it generates a self-signed certificate.
+func ensureCert(certFile, keyFile string) error {
+	// Check if both files exist
+	_, certErr := os.Stat(certFile)
+	_, keyErr := os.Stat(keyFile)
+
+	if certErr == nil && keyErr == nil {
+		// Both exist, nothing to do
+		return nil
 	}
 
-	log.Println("Generating self-signed certificate...")
-
-	// Create the directory if it doesn't exist
+	// Ensure the directory exists
 	dir := filepath.Dir(certFile)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return fmt.Errorf("failed to create directory for certificates: %v", err)
 	}
+
+	fmt.Println("Generating self-signed certificate...")
 
 	// Generate private key
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate private key: %v", err)
 	}
 
-	// Create certificate template
+	// Create template for the certificate
 	notBefore := time.Now()
 	notAfter := notBefore.Add(365 * 24 * time.Hour) // Valid for 1 year
 
 	serialNumberLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serialNumber, err := rand.Int(rand.Reader, serialNumberLimit)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to generate serial number: %v", err)
 	}
 
 	template := x509.Certificate{
 		SerialNumber: serialNumber,
 		Subject: pkix.Name{
-			Organization: []string{"E-Bu Development"},
+			Organization: []string{"E-Bu Local Server"},
 		},
 		NotBefore: notBefore,
 		NotAfter:  notAfter,
@@ -59,12 +63,13 @@ func EnsureCert(certFile, keyFile string) error {
 		BasicConstraintsValid: true,
 	}
 
-	// Add localhost and loopback IPs
-	template.DNSNames = append(template.DNSNames, "localhost")
-	template.IPAddresses = append(template.IPAddresses, net.ParseIP("127.0.0.1"), net.ParseIP("::1"))
+	// Add IP addresses and localhost to SANs
+	template.IPAddresses = []net.IP{net.ParseIP("127.0.0.1"), net.ParseIP("::1")}
+	template.DNSNames = []string{"localhost"}
 
-	// Add local network IPs
-	if addrs, err := net.InterfaceAddrs(); err == nil {
+	// Try to find local IP addresses
+	addrs, err := net.InterfaceAddrs()
+	if err == nil {
 		for _, addr := range addrs {
 			if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 				if ipnet.IP.To4() != nil {
@@ -77,30 +82,32 @@ func EnsureCert(certFile, keyFile string) error {
 	// Create certificate
 	derBytes, err := x509.CreateCertificate(rand.Reader, &template, &template, &priv.PublicKey, priv)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create certificate: %v", err)
 	}
 
-	// Save certificate
+	// Write certificate to file
 	certOut, err := os.Create(certFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open %s for writing: %v", certFile, err)
 	}
-	defer certOut.Close()
 	if err := pem.Encode(certOut, &pem.Block{Type: "CERTIFICATE", Bytes: derBytes}); err != nil {
-		return err
+		certOut.Close()
+		return fmt.Errorf("failed to write data to %s: %v", certFile, err)
 	}
+	certOut.Close()
 
-	// Save private key
+	// Write private key to file
 	keyOut, err := os.Create(keyFile)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to open %s for writing: %v", keyFile, err)
 	}
-	defer keyOut.Close()
 	privBytes := x509.MarshalPKCS1PrivateKey(priv)
 	if err := pem.Encode(keyOut, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: privBytes}); err != nil {
-		return err
+		keyOut.Close()
+		return fmt.Errorf("failed to write data to %s: %v", keyFile, err)
 	}
+	keyOut.Close()
 
-	log.Printf("Certificate generated:\n\t%s\n\t%s", certFile, keyFile)
+	fmt.Printf("Successfully generated certificate at %s and key at %s\n", certFile, keyFile)
 	return nil
 }

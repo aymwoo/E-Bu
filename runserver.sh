@@ -49,6 +49,9 @@ export TLS_KEY="../certs/server.key"
 export GIN_MODE=release
 export CGO_ENABLED=1
 export GOPROXY=https://goproxy.cn,direct
+# TLS Configuration
+export TLS_CERT="../certs/server.crt"
+export TLS_KEY="../certs/server.key"
 
 echo "Downloading Go dependencies..."
 go mod download
