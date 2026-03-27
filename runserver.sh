@@ -34,6 +34,7 @@ fi
 
 # Create data directory if not exists
 mkdir -p data
+mkdir -p certs
 
 # Start Backend
 echo -e "${GREEN}[2/2] Starting Backend Server...${NC}"
@@ -43,6 +44,8 @@ cd backend
 export DB_PATH="../data/ebu.db"
 export STATIC_DIR="../dist"
 export PORT=8080
+export TLS_CERT="../certs/server.crt"
+export TLS_KEY="../certs/server.key"
 export GIN_MODE=release
 export CGO_ENABLED=1
 export GOPROXY=https://goproxy.cn,direct
