@@ -13,7 +13,7 @@ import (
 )
 
 func ensureQuestionColumns(db *gorm.DB) error {
-	// sqlite schema fix: older DBs may miss newly added columns.
+	// sqlite schema compatibility: older DBs may miss newly added columns.
 	// Column names follow GORM's default naming strategy (snake_case).
 	type columnSpec struct {
 		Name string
@@ -24,6 +24,14 @@ func ensureQuestionColumns(db *gorm.DB) error {
 		{
 			Name: "learning_guide",
 			DDL:  "ALTER TABLE questions ADD COLUMN learning_guide TEXT NOT NULL DEFAULT ''",
+		},
+		{
+			Name: "analysis",
+			DDL:  "ALTER TABLE questions ADD COLUMN analysis TEXT NOT NULL DEFAULT ''",
+		},
+		{
+			Name: "knowledge_points",
+			DDL:  "ALTER TABLE questions ADD COLUMN knowledge_points TEXT NOT NULL DEFAULT '[]'",
 		},
 	}
 

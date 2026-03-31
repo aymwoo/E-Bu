@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"E-Bu-backend/database"
 	"E-Bu-backend/handlers"
@@ -16,9 +17,40 @@ func main() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 
+	// Parse allowed origins
+	allowedOriginsStr := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOriginsStr == "" {
+		allowedOriginsStr = "http://localhost:5173,http://localhost:3000"
+	}
+	allowedOrigins := strings.Split(allowedOriginsStr, ",")
+	for i := range allowedOrigins {
+		allowedOrigins[i] = strings.TrimSpace(allowedOrigins[i])
+	}
+
 	// Enable CORS
 	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		allowed := false
+		allowStar := false
+
+		for _, o := range allowedOrigins {
+			if o == "*" {
+				allowStar = true
+				break
+			}
+			if o == origin {
+				allowed = true
+				break
+			}
+		}
+
+		if allowStar {
+			c.Header("Access-Control-Allow-Origin", "*")
+		} else if allowed {
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
+
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization, X-Requested-With")
 		if c.Request.Method == "OPTIONS" {

@@ -32,6 +32,26 @@ func migrations() []Migration {
 				return db.Exec("ALTER TABLE questions ADD COLUMN learning_guide TEXT NOT NULL DEFAULT ''").Error
 			},
 		},
+		{
+			Version: 2,
+			Name:    "ensure questions.analysis column",
+			Up: func(db *gorm.DB) error {
+				if db.Migrator().HasColumn("questions", "analysis") {
+					return nil
+				}
+				return db.Exec("ALTER TABLE questions ADD COLUMN analysis TEXT NOT NULL DEFAULT ''").Error
+			},
+		},
+		{
+			Version: 3,
+			Name:    "ensure questions.knowledge_points column",
+			Up: func(db *gorm.DB) error {
+				if db.Migrator().HasColumn("questions", "knowledge_points") {
+					return nil
+				}
+				return db.Exec("ALTER TABLE questions ADD COLUMN knowledge_points TEXT NOT NULL DEFAULT '[]'").Error
+			},
+		},
 	}
 }
 
@@ -139,7 +159,19 @@ func ApplyMigrationsToLatest(db *gorm.DB) ([]MigrationInfo, error) {
 			if err := mig.Up(tx); err != nil {
 				return err
 			}
-			return tx.Create(&AppliedMigration{Version: mig.Version, Name: mig.Name}).Error
+			if err := tx.Create(&AppliedMigration{Version: mig.Version, Name: mig.Name}).Error; err != nil {
+				return err
+			}
+
+			// Ensure we still apply legacy one-off sqlite fixes for installations
+			// that might have skipped intermediate versions.
+			if tx.Migrator().HasTable("schema_version") {
+				if err := tx.Exec("UPDATE schema_version SET version = ?", mig.Version).Error; err != nil {
+					return fmt.Errorf("error updating schema_version: %w", err)
+				}
+			}
+
+			return nil
 		})
 		if err != nil {
 			return appliedNow, fmt.Errorf("migration %d failed: %w", mig.Version, err)

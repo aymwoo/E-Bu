@@ -152,7 +152,7 @@ const compressImage = async (base64Str: string): Promise<string> => {
 /**
  * Helper function to clean and parse JSON from AI responses
  */
-function cleanAndParseJSON(content: string): GeminiAnalysisResponse {
+export function cleanAndParseJSON(content: string): GeminiAnalysisResponse {
   let cleaned = content.trim();
 
   if (cleaned.startsWith("```json")) {
