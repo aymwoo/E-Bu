@@ -196,26 +196,35 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
 
     setIsProcessing(true);
 
-    // 顺序处理以防触发 API Rate Limit，也可以根据需要改为并行
-    for (const item of pendingItems) {
-      setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'analyzing', error: undefined } : i));
-      
-      try {
-        const result = await apiService.analyzeImage(item.preview);
-        const questionData = {
-          image: item.preview,
-          ...result
-        };
+    // 并行处理，限制并发数为3以防触发 API Rate Limit
+    const CONCURRENCY_LIMIT = 3;
+    let currentIndex = 0;
+
+    const workers = Array.from({ length: Math.min(CONCURRENCY_LIMIT, pendingItems.length) }, async () => {
+      while (currentIndex < pendingItems.length) {
+        const item = pendingItems[currentIndex++];
         
-        // 标记成功
-        setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done', result: questionData } : i));
+        setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'analyzing', error: undefined } : i));
         
-        // 即时通知 App 保存，这样用户不必等待所有都完成
-        await onQuestionSaved(questionData);
-      } catch (err: any) {
-        setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', error: err.message || '识别失败' } : i));
+        try {
+          const result = await apiService.analyzeImage(item.preview);
+          const questionData = {
+            image: item.preview,
+            ...result
+          };
+
+          // 标记成功
+          setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'done', result: questionData } : i));
+
+          // 即时通知 App 保存，这样用户不必等待所有都完成
+          await onQuestionSaved(questionData);
+        } catch (err: any) {
+          setItems(prev => prev.map(i => i.id === item.id ? { ...i, status: 'error', error: err.message || '识别失败' } : i));
+        }
       }
-    }
+    });
+
+    await Promise.all(workers);
 
     setIsProcessing(false);
   };
