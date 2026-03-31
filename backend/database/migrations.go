@@ -139,7 +139,19 @@ func ApplyMigrationsToLatest(db *gorm.DB) ([]MigrationInfo, error) {
 			if err := mig.Up(tx); err != nil {
 				return err
 			}
-			return tx.Create(&AppliedMigration{Version: mig.Version, Name: mig.Name}).Error
+			if err := tx.Create(&AppliedMigration{Version: mig.Version, Name: mig.Name}).Error; err != nil {
+				return err
+			}
+
+			// Ensure we still apply legacy one-off sqlite fixes for installations
+			// that might have skipped intermediate versions.
+			if tx.Migrator().HasTable("schema_version") {
+				if err := tx.Exec("UPDATE schema_version SET version = ?", mig.Version).Error; err != nil {
+					return fmt.Errorf("error updating schema_version: %w", err)
+				}
+			}
+
+			return nil
 		})
 		if err != nil {
 			return appliedNow, fmt.Errorf("migration %d failed: %w", mig.Version, err)
