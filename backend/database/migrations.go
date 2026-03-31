@@ -32,6 +32,26 @@ func migrations() []Migration {
 				return db.Exec("ALTER TABLE questions ADD COLUMN learning_guide TEXT NOT NULL DEFAULT ''").Error
 			},
 		},
+		{
+			Version: 2,
+			Name:    "ensure questions.analysis column",
+			Up: func(db *gorm.DB) error {
+				if db.Migrator().HasColumn("questions", "analysis") {
+					return nil
+				}
+				return db.Exec("ALTER TABLE questions ADD COLUMN analysis TEXT NOT NULL DEFAULT ''").Error
+			},
+		},
+		{
+			Version: 3,
+			Name:    "ensure questions.knowledge_points column",
+			Up: func(db *gorm.DB) error {
+				if db.Migrator().HasColumn("questions", "knowledge_points") {
+					return nil
+				}
+				return db.Exec("ALTER TABLE questions ADD COLUMN knowledge_points TEXT NOT NULL DEFAULT '[]'").Error
+			},
+		},
 	}
 }
 

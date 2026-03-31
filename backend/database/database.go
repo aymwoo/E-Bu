@@ -25,6 +25,14 @@ func ensureQuestionColumns(db *gorm.DB) error {
 			Name: "learning_guide",
 			DDL:  "ALTER TABLE questions ADD COLUMN learning_guide TEXT NOT NULL DEFAULT ''",
 		},
+		{
+			Name: "analysis",
+			DDL:  "ALTER TABLE questions ADD COLUMN analysis TEXT NOT NULL DEFAULT ''",
+		},
+		{
+			Name: "knowledge_points",
+			DDL:  "ALTER TABLE questions ADD COLUMN knowledge_points TEXT NOT NULL DEFAULT '[]'",
+		},
 	}
 
 	for _, col := range columns {
