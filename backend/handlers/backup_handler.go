@@ -49,11 +49,7 @@ func (h *BackupHandler) ImportBackup(c *gin.Context) {
 	}
 
 	// Clear existing data (optional - you might want to merge instead)
-	var existingQuestions []models.Question
-	h.DB.Find(&existingQuestions)
-	for _, question := range existingQuestions {
-		h.DB.Delete(&question)
-	}
+	h.DB.Where("1 = 1").Delete(&models.Question{})
 
 	// Import new data
 	for i := range backupData.Data {
