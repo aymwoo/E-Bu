@@ -13,7 +13,7 @@ import (
 )
 
 func ensureQuestionColumns(db *gorm.DB) error {
-	// sqlite schema fix: older DBs may miss newly added columns.
+	// sqlite schema compatibility: older DBs may miss newly added columns.
 	// Column names follow GORM's default naming strategy (snake_case).
 	type columnSpec struct {
 		Name string
