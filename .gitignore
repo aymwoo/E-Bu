@@ -28,3 +28,6 @@ backend/main.exe
 RELEASE_NOTES.md
 certs/
 backend/E-Bu-backend
+
+# 误提交的运行时数据库
+/ebu.db

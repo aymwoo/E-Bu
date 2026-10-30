@@ -12,18 +12,26 @@ const HelpCenter: React.FC<HelpCenterProps> = ({ onClose, onDataChanged }) => {
   const [activeSection, setActiveSection] = useState<'GUIDE' | 'DATA' | 'API'>('GUIDE');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isImporting, setIsImporting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
-  const handleExport = () => {
-    const jsonString = apiService.exportBackup();
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `E-Bu_Backup_${new Date().toISOString().slice(0, 10)}.json`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
+  const handleExport = async () => {
+    try {
+      setIsExporting(true);
+      const jsonString = await apiService.exportBackup();
+      const blob = new Blob([jsonString], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `E-Bu_Backup_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert('导出失败: ' + (err?.message || '未知错误'));
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const handleImportClick = () => {
@@ -256,9 +264,10 @@ const HelpCenter: React.FC<HelpCenterProps> = ({ onClose, onDataChanged }) => {
                     <p className="text-sm text-slate-500 mb-8 flex-1">将当前本地库中所有题目（含图片、图例、回收站数据）导出为 JSON 文件。</p>
                     <button 
                       onClick={handleExport}
-                      className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100"
+                      disabled={isExporting}
+                      className="w-full py-3 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      立即导出备份
+                      {isExporting ? '导出中...' : '立即导出备份'}
                     </button>
                   </div>
 

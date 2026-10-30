@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { apiService } from "./apiService";
 
@@ -132,5 +132,36 @@ describe("apiService.createQuestion LaTeX normalization", () => {
     expect(body.answer).toBe("$x_1+x^2$");
     expect(body.learningGuide).toBe("保持 $x$ 不变");
     expect(body.options).toEqual(["选项含$\\frac{1}{6}$", "换行\\n不要包裹"]);
+  });
+});
+
+describe("apiService.exportBackup", () => {
+  const originalFetch = global.fetch;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("returns the raw JSON text of /api/export", async () => {
+    const payload = JSON.stringify({ version: "1.3.0", data: [] });
+    global.fetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      text: async () => payload,
+    })) as any;
+
+    await expect(apiService.exportBackup()).resolves.toBe(payload);
+  });
+
+  it("throws instead of handing back an unusable value", async () => {
+    global.fetch = vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      text: async () => "boom",
+    })) as any;
+
+    // Previously HelpCenter did `new Blob([apiService.exportBackup()])`,
+    // which silently downloaded the string "[object Promise]".
+    await expect(apiService.exportBackup()).rejects.toThrow(/导出失败/);
   });
 });

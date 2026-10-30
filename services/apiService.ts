@@ -477,9 +477,14 @@ export const apiService = {
   // User asked for "all API", so we should use /api/export if available.
   // Backend has /api/export and /api/import.
 
-  async exportBackup(): Promise<void> {
-    window.open("/api/export", "_blank");
-    // Or fetch and download blob
+  async exportBackup(): Promise<string> {
+    // Fetch the JSON instead of window.open() so the caller can save it
+    // under a proper filename and report errors.
+    const res = await fetch("/api/export");
+    if (!res.ok) {
+      throw new Error(`导出失败: HTTP ${res.status}`);
+    }
+    return res.text();
   },
 
   // Database migrations
