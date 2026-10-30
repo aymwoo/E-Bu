@@ -10,7 +10,7 @@ const useDebouncedValue = <T,>(value: T, delayMs: number): T => {
   return debounced;
 };
 import { Question, Subject, AIConfig } from './types';
-import { apiService } from './services/apiService';
+import { apiService, providerLabel } from './services/apiService';
 import QuestionCard from './components/QuestionCard';
 import QuestionListItem from './components/QuestionListItem';
 import QuestionDialog from './components/QuestionDialog';
@@ -682,6 +682,7 @@ const App: React.FC = () => {
 
       {isCapturing && (
         <CaptureQuestion
+          providerLabel={providerLabel(aiConfig?.activeProvider, aiConfig)}
           onQuestionSaved={handleBatchSave}
           onCancel={() => {
             setIsCapturing(false);

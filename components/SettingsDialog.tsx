@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { apiService } from '../services/apiService';
+import { apiService, isBuiltInProvider, providerLabel } from '../services/apiService';
 import { AIConfig, AIProviderType, AIProviderConfig, CustomAIProvider } from '../types';
 import { DEFAULT_SYSTEM_PROMPT, testAIConfig } from '../services/imageAnalysisService';
 
@@ -146,9 +146,20 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose, onConfigSaved 
     setTestResult(null);
   };
 
-  // Set selected provider as active
-  const setAsActiveProvider = () => {
-    setConfig(prev => ({ ...prev, activeProvider: selectedProvider }));
+  // Set selected provider as active (persisted immediately, so users do not
+  // have to remember to also press 保存配置)
+  const setAsActiveProvider = async () => {
+    const next = { ...config, activeProvider: selectedProvider };
+    setConfig(next);
+    try {
+      await apiService.saveAIConfig(next);
+      onConfigSaved?.(next);
+      setToast({ type: 'success', message: `已切换为当前使用：${providerLabel(String(selectedProvider), next)}` });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setToast({ type: 'error', message: `切换失败: ${message}` });
+      setTestResult({ success: false, message: `切换失败: ${message}` });
+    }
   };
 
   // Add new custom provider
@@ -187,50 +198,70 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose, onConfigSaved 
     }
   };
 
+  // Build the AIProviderConfig that belongs to `id` in the current draft state
+  const buildTestConfig = (id: AIProviderType | string) => {
+    if (isBuiltInProvider(String(id))) {
+      const providerConfig = config.providers[id as AIProviderType] || {};
+      return {
+        type: id,
+        apiKey: providerConfig.apiKey,
+        baseUrl: providerConfig.baseUrl,
+        modelName: providerConfig.modelName,
+        systemPrompt: config.systemPrompt,
+      };
+    }
+    const customProvider = config.customProviders?.find(p => p.id === id);
+    return {
+      type: id,
+      apiKey: customProvider?.config.apiKey,
+      baseUrl: customProvider?.config.baseUrl,
+      modelName: customProvider?.config.modelName,
+      systemPrompt: config.systemPrompt,
+    };
+  };
+
+  /**
+   * Save first, then test.
+   * The old order (test → save) meant a failed connectivity test silently threw
+   * away the whole configuration, so switching provider appeared to "not work".
+   */
   const handleSave = async () => {
+    setIsTesting(true);
+    setTestResult(null);
+    setToast(null);
+
     try {
-      setIsTesting(true);
-      setTestResult(null);
-      setToast(null);
-
-      // Build the active provider config for testing
-      let testConfig;
-      if (isCustomProvider(config.activeProvider)) {
-        const customProvider = config.customProviders.find(p => p.id === config.activeProvider);
-        testConfig = {
-          type: config.activeProvider,
-          apiKey: customProvider?.config.apiKey,
-          baseUrl: customProvider?.config.baseUrl,
-          modelName: customProvider?.config.modelName,
-          systemPrompt: config.systemPrompt
-        };
-      } else {
-        const providerConfig = config.providers[config.activeProvider as AIProviderType] || {};
-        testConfig = {
-          type: config.activeProvider,
-          apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
-          modelName: providerConfig.modelName,
-          systemPrompt: config.systemPrompt
-        };
-      }
-
-      await testAIConfig(testConfig);
-
-      apiService.saveAIConfig(config);
+      await apiService.saveAIConfig(config);
       onConfigSaved?.(config);
       setToast({ type: 'success', message: '设置已成功保存！' });
-      setTestResult({ success: true, message: '配置测试成功！' });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : '保存失败';
+      setTestResult({ success: false, message: `保存失败: ${errorMessage}` });
+      setToast({ type: 'error', message: `保存失败: ${errorMessage}` });
+      setIsTesting(false);
+      return;
+    }
 
+    // Now verify the provider that will actually be used.
+    const activeLabel = providerLabel(String(config.activeProvider), config);
+    try {
+      await testAIConfig(buildTestConfig(config.activeProvider));
+      setTestResult({ success: true, message: `已保存，当前使用：${activeLabel}（连接正常）` });
       if (activeTab === 'AI') {
         setTimeout(() => {
           onClose();
-        }, 1500);
+        }, 1200);
       }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '配置测试失败';
-      setTestResult({ success: false, message: errorMessage });
-      setToast({ type: 'error', message: `保存失败: ${errorMessage}` });
+    } catch (e) {
+      const errorMessage = e instanceof Error ? e.message : '连接测试失败';
+      const editingOther = selectedProvider !== config.activeProvider;
+      const hint = editingOther
+        ? `（已保存。注意：当前使用的仍是「${activeLabel}」，你正在编辑的是「${providerLabel(String(selectedProvider), config)}」，需点击「设为当前」才会生效）`
+        : '';
+      setTestResult({
+        success: false,
+        message: `配置已保存，但当前服务商「${activeLabel}」连接测试失败：${errorMessage}${hint}`,
+      });
     } finally {
       setIsTesting(false);
     }
@@ -241,33 +272,18 @@ const SettingsDialog: React.FC<SettingsDialogProps> = ({ onClose, onConfigSaved 
       setIsTesting(true);
       setTestResult(null);
 
-      let testConfig;
-      if (isCustomProvider(selectedProvider)) {
-        const customProvider = config.customProviders.find(p => p.id === selectedProvider);
-        testConfig = {
-          type: selectedProvider,
-          apiKey: customProvider?.config.apiKey,
-          baseUrl: customProvider?.config.baseUrl,
-          modelName: customProvider?.config.modelName,
-          systemPrompt: config.systemPrompt
-        };
-      } else {
-        const providerConfig = config.providers[selectedProvider as AIProviderType] || {};
-        testConfig = {
-          type: selectedProvider,
-          apiKey: providerConfig.apiKey,
-          baseUrl: providerConfig.baseUrl,
-          modelName: providerConfig.modelName,
-          systemPrompt: config.systemPrompt
-        };
-      }
+      await testAIConfig(buildTestConfig(selectedProvider));
 
-      await testAIConfig(testConfig);
-
-      setTestResult({ success: true, message: '配置测试成功！' });
+      setTestResult({
+        success: true,
+        message: `「${providerLabel(String(selectedProvider), config)}」配置测试成功！`,
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : '配置测试失败';
-      setTestResult({ success: false, message: errorMessage });
+      setTestResult({
+        success: false,
+        message: `「${providerLabel(String(selectedProvider), config)}」测试失败：${errorMessage}`,
+      });
     } finally {
       setIsTesting(false);
     }

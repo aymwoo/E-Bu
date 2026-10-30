@@ -3,6 +3,7 @@ import {
   GeminiAnalysisResponse,
   AIConfig,
   AIProviderType,
+  AIProviderConfig,
   Subject,
 } from "../types";
 import { analyzeQuestionImage } from "./imageAnalysisService";
@@ -110,49 +111,117 @@ const normalizeLatexInOptions = (options: any): string[] => {
   );
 };
 
+export const AI_PROVIDER_LABELS: Record<string, string> = {
+  [AIProviderType.GEMINI]: "Google Gemini",
+  [AIProviderType.QWEN]: "通义千问",
+  [AIProviderType.DOUBAO]: "豆包",
+  [AIProviderType.OPENAI]: "OpenAI / 兼容",
+};
+
+export const DEFAULT_AI_CONFIG: AIConfig = {
+  activeProvider: AIProviderType.GEMINI,
+  providers: {},
+  customProviders: [],
+  enableLatexAutoFix: true,
+};
+
+export const isBuiltInProvider = (id: string): boolean =>
+  Object.values(AIProviderType).includes(id as AIProviderType);
+
+/** Human readable name for the provider in use (built-in or custom). */
+export const providerLabel = (
+  id: string | undefined,
+  config?: AIConfig | null,
+): string => {
+  if (!id) return "AI";
+  const custom = config?.customProviders?.find((p) => p.id === id);
+  if (custom) return custom.name || id;
+  return AI_PROVIDER_LABELS[id] || String(id);
+};
+
+/**
+ * Coerce whatever the backend hands us (new `configData` blob or the legacy
+ * single-provider payload) into a well-formed AIConfig.
+ * Unknown legacy fields are dropped so they can never leak back into the DB.
+ */
+export function normalizeAIConfig(raw: any): AIConfig {
+  if (!raw || typeof raw !== "object") return { ...DEFAULT_AI_CONFIG };
+
+  const providers: AIConfig["providers"] = {
+    ...(raw.providers && typeof raw.providers === "object" ? raw.providers : {}),
+  };
+
+  // Legacy payload: { type, baseUrl, modelName, systemPrompt }
+  if (typeof raw.type === "string" && isBuiltInProvider(raw.type)) {
+    const legacyType = raw.type as AIProviderType;
+    const legacyCfg: AIProviderConfig = {
+      ...(providers[legacyType] || {}),
+    };
+    if (typeof raw.apiKey === "string" && raw.apiKey) legacyCfg.apiKey = raw.apiKey;
+    if (typeof raw.baseUrl === "string" && raw.baseUrl) legacyCfg.baseUrl = raw.baseUrl;
+    if (typeof raw.modelName === "string" && raw.modelName)
+      legacyCfg.modelName = raw.modelName;
+    providers[legacyType] = legacyCfg;
+  }
+
+  const activeProvider =
+    typeof raw.activeProvider === "string" && raw.activeProvider
+      ? raw.activeProvider
+      : typeof raw.type === "string" && raw.type
+        ? raw.type
+        : AIProviderType.GEMINI;
+
+  return {
+    activeProvider,
+    providers,
+    customProviders: Array.isArray(raw.customProviders) ? raw.customProviders : [],
+    systemPrompt:
+      typeof raw.systemPrompt === "string" ? raw.systemPrompt : undefined,
+    enableLatexAutoFix: raw.enableLatexAutoFix !== false,
+  };
+}
+
+// Last config read from the server. Used only as a fallback when a later
+// request fails, so a network blip never silently switches the user back
+// to the default (Gemini) provider.
+let cachedAIConfig: AIConfig | null = null;
+
 export const apiService = {
   // AI Config Management
   async getAIConfig(): Promise<AIConfig> {
     try {
       const res = await fetch("/api/config");
-      if (!res.ok) throw new Error("Failed to load config");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      // If new format
-      if (data.configData) {
-        return JSON.parse(data.configData);
-      }
-
-      // Fallback or legacy format handling (if any)
-      const defaultConfig: AIConfig = {
-        activeProvider: AIProviderType.GEMINI,
-        providers: {},
-        customProviders: [],
-        enableLatexAutoFix: true,
-      };
-      return { ...defaultConfig, ...data };
+      const raw = data?.configData ? JSON.parse(data.configData) : data;
+      const config = normalizeAIConfig(raw);
+      cachedAIConfig = config;
+      return config;
     } catch (e) {
-      console.warn("Could not load remote config, using defaults", e);
-      return {
-        activeProvider: AIProviderType.GEMINI,
-        providers: {},
-        customProviders: [],
-        enableLatexAutoFix: true,
-      };
+      const reason = e instanceof Error ? e.message : String(e);
+      console.warn("Could not load remote AI config:", reason);
+      if (cachedAIConfig) return cachedAIConfig;
+      throw new Error(`无法读取模型配置（${reason}），请确认后端服务已启动。`);
     }
   },
 
   async saveAIConfig(config: AIConfig): Promise<void> {
-    try {
-      await fetch("/api/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ configData: JSON.stringify(config) }),
-      });
-    } catch (e) {
-      console.error("Failed to save config", e);
-      throw e;
+    const clean = normalizeAIConfig(config);
+    const res = await fetch("/api/config", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ configData: JSON.stringify(clean) }),
+    });
+
+    if (!res.ok) {
+      const detail = await res.text().catch(() => "");
+      throw new Error(
+        `保存模型配置失败: HTTP ${res.status}${detail ? ` ${detail.slice(0, 200)}` : ""}`,
+      );
     }
+
+    cachedAIConfig = clean;
   },
 
   // Helper for internal use or simple syncing (Deprecated but kept for compatibility logic)
@@ -164,14 +233,24 @@ export const apiService = {
     }
   },
 
+  /**
+   * Resolve the config of the provider that is actually marked as active.
+   * Never falls back to another provider silently: a wrong provider is much
+   * harder to diagnose than an explicit error.
+   */
   async getActiveProviderConfig() {
-    // This now must be async
     const config = await this.getAIConfig();
     const activeId = config.activeProvider;
+    const activeLabel = providerLabel(activeId, config);
 
-    // Check if it's a built-in provider
-    if (Object.values(AIProviderType).includes(activeId as AIProviderType)) {
+    // Built-in provider
+    if (isBuiltInProvider(activeId)) {
       const providerConfig = config.providers[activeId as AIProviderType] || {};
+      if (!providerConfig.apiKey) {
+        throw new Error(
+          `当前使用的服务商「${activeLabel}」未填写 API Key，请打开设置填写后保存，或切换为已配置的服务商。`,
+        );
+      }
       return {
         type: activeId,
         apiKey: providerConfig.apiKey,
@@ -181,22 +260,26 @@ export const apiService = {
       };
     }
 
-    // Check custom providers
+    // Custom provider
     const customProvider = config.customProviders.find(
-      (p) => p.id === activeId
+      (p) => p.id === activeId,
     );
-    if (customProvider) {
-      return {
-        type: customProvider.id,
-        apiKey: customProvider.config.apiKey,
-        baseUrl: customProvider.config.baseUrl,
-        modelName: customProvider.config.modelName,
-        systemPrompt: config.systemPrompt,
-      };
+    if (!customProvider) {
+      throw new Error(
+        `当前使用的服务商（${activeId}）在配置中已不存在，请在设置中重新选择并保存。`,
+      );
     }
-
+    if (!customProvider.config.baseUrl) {
+      throw new Error(
+        `自定义服务商「${customProvider.name}」未填写接口地址 (Base URL)。`,
+      );
+    }
     return {
-      type: AIProviderType.GEMINI,
+      type: customProvider.id,
+      apiKey: customProvider.config.apiKey,
+      baseUrl: customProvider.config.baseUrl,
+      modelName: customProvider.config.modelName,
+      systemPrompt: config.systemPrompt,
     };
   },
 

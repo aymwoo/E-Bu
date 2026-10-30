@@ -197,6 +197,217 @@ function cleanAndParseJSON(content: string): GeminiAnalysisResponse {
   }
 }
 
+/* ------------------------------------------------------------------ *
+ * Response shape helpers
+ *
+ * Different OpenAI-compatible gateways wrap the assistant message very
+ * differently (choices[].message.content, {result:{response}}, {response},
+ * Ollama's {message:{content}}, SSE bodies ...). Never assume a shape:
+ * destructuring a missing branch used to crash with
+ * "Cannot read properties of undefined (reading 'response')".
+ * ------------------------------------------------------------------ */
+
+type AnyRecord = Record<string, any>;
+
+function isRecord(value: unknown): value is AnyRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function safeParseJSON(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+function snippet(text: string, max = 300): string {
+  const trimmed = (text || "").replace(/\s+/g, " ").trim();
+  return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+/** Coerce a message `content` field (string | parts array | object) into text. */
+function contentToText(content: unknown): string | undefined {
+  if (typeof content === "string") {
+    return content.trim() ? content : undefined;
+  }
+  if (Array.isArray(content)) {
+    const merged = content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (isRecord(part)) {
+          if (typeof part.text === "string") return part.text;
+          if (typeof part.content === "string") return part.content;
+        }
+        return "";
+      })
+      .join("");
+    return merged.trim() ? merged : undefined;
+  }
+  if (isRecord(content)) {
+    if (typeof content.text === "string") return content.text;
+    if (content.content) return contentToText(content.content);
+  }
+  return undefined;
+}
+
+/**
+ * Extract the assistant text from any known chat-completion envelope.
+ * Exported for tests.
+ */
+export function extractAssistantText(payload: unknown): string | undefined {
+  if (typeof payload === "string") {
+    return payload.trim() ? payload : undefined;
+  }
+  if (!isRecord(payload)) return undefined;
+
+  // 1) OpenAI / DashScope / Ark / most gateways: choices[0].message.content
+  if (Array.isArray(payload.choices) && payload.choices.length > 0) {
+    const choice = payload.choices[0];
+    const text =
+      contentToText(choice?.message?.content) ??
+      contentToText(choice?.delta?.content) ??
+      contentToText(choice?.text) ??
+      contentToText(choice);
+    if (text) return text;
+  }
+
+  // 2) Proxies that nest the OpenAI envelope one level deeper.
+  if (isRecord(payload.data)) {
+    const nested = extractAssistantText(payload.data);
+    if (nested) return nested;
+  }
+  if (isRecord(payload.result)) {
+    const nested = extractAssistantText(payload.result);
+    if (nested) return nested;
+  }
+
+  // 3) {result: {response}} / {response} / Ollama {message: {content}}
+  const direct = [
+    payload.result?.response,
+    payload.response,
+    payload.output_text,
+    payload.output?.text,
+    payload.answer,
+  ];
+  for (const candidate of direct) {
+    const text = contentToText(candidate);
+    if (text) return text;
+  }
+
+  // Ollama-style {message: {content}} (a bare string `message` is an error
+  // envelope, not model output — never treat it as the answer).
+  if (isRecord(payload.message)) {
+    const messageText = contentToText(payload.message.content);
+    if (messageText) return messageText;
+  }
+
+  // 4) Last resort: a bare text field on the envelope itself.
+  return contentToText(payload.content) ?? contentToText(payload.text);
+}
+
+/** Rebuild text from a `data: {...}` SSE body (some gateways stream anyway). */
+function extractFromSSE(rawText: string): string | undefined {
+  if (!/^\s*(data|event):/.test(rawText)) return undefined;
+  const chunks: string[] = [];
+  for (const line of rawText.split(/\r?\n/)) {
+    const match = /^\s*data:\s*(.*)$/.exec(line);
+    if (!match) continue;
+    const data = match[1].trim();
+    if (!data || data === "[DONE]") continue;
+    const parsed = safeParseJSON(data);
+    const text = extractAssistantText(parsed);
+    if (text) chunks.push(text);
+  }
+  const merged = chunks.join("");
+  return merged.trim() ? merged : undefined;
+}
+
+/** Pull a human-readable message out of any API error envelope. */
+function errorMessageFromPayload(payload: unknown): string | undefined {
+  if (typeof payload === "string") return payload.trim() || undefined;
+  if (!isRecord(payload)) return undefined;
+
+  const error = payload.error;
+  if (typeof error === "string") return error.trim() || undefined;
+  if (isRecord(error)) {
+    const inner = [error.message, error.msg, error.error?.message, error.code]
+      .find((v) => typeof v === "string" && v.trim());
+    if (typeof inner === "string") return inner.trim();
+  }
+
+  const top = [payload.message, payload.msg, payload.detail, payload.error_msg, payload.errorMessage]
+    .find((v) => typeof v === "string" && v.trim());
+  return typeof top === "string" ? top.trim() : undefined;
+}
+
+/** Users often paste the full endpoint instead of the base URL. */
+function normalizeBaseUrl(baseUrl: string | undefined, fallback: string): string {
+  const url = (baseUrl || fallback || "").trim().replace(/\/+$/, "");
+  return url.replace(/\/chat\/completions$/i, "");
+}
+
+function toDataUrl(image: string): string {
+  return image.startsWith("data:") ? image : `data:image/jpeg;base64,${image}`;
+}
+
+interface ChatCallResult {
+  ok: boolean;
+  status: number;
+  rawText: string;
+  payload: any;
+}
+
+async function callChatCompletion(
+  baseUrl: string,
+  apiKey: string | undefined,
+  body: unknown,
+): Promise<ChatCallResult> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  // Local / self-hosted gateways (Ollama, vLLM, LM Studio ...) need no key.
+  if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  // Read as text first so an unexpected (non-JSON) body never turns into an
+  // opaque `response.json()` failure.
+  const rawText = await response.text();
+  return {
+    ok: response.ok,
+    status: response.status,
+    rawText,
+    payload: safeParseJSON(rawText),
+  };
+}
+
+/** Friendly message for provider-side failures. */
+function describeCallFailure(result: ChatCallResult, baseUrl: string): string {
+  const message =
+    errorMessageFromPayload(result.payload) ||
+    snippet(result.rawText) ||
+    `HTTP error! status: ${result.status}`;
+
+  if (/support text|MultiContent|image_url|vision|multimodal/i.test(message)) {
+    return `该模型似乎不支持图片输入。请确保在服务商控制台选择了支持视觉(Vision)能力的模型版本。原始错误：${message}`;
+  }
+
+  if (result.status === 401 || result.status === 403) {
+    return `API Key 无效或已过期（HTTP ${result.status}）。请检查密钥是否完整、是否与所选服务商匹配。原始错误：${message}`;
+  }
+
+  if (result.status === 404) {
+    return `接口地址或模型名称不存在（HTTP 404）。接口地址：${baseUrl}，请确认 Base URL 是否包含正确的版本路径（如 /v1），以及模型名称是否可用。原始错误：${message}`;
+  }
+
+  return message;
+}
+
 /**
  * Gemini Provider Implementation
  */
@@ -239,113 +450,114 @@ async function analyzeWithGemini(
 /**
  * OpenAI Compatible Provider Implementation (Qwen, Doubao, OpenAI)
  */
+function buildChatRequestBody(
+  base64Image: string,
+  model: string,
+  prompt: string,
+  includeResponseFormat: boolean,
+): AnyRecord {
+  const body: AnyRecord = {
+    model,
+    messages: [
+      { role: "system", content: prompt },
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "请解析这张题目图片，并以 JSON 格式输出。" },
+          { type: "image_url", image_url: { url: toDataUrl(base64Image) } },
+        ],
+      },
+    ],
+  };
+  if (includeResponseFormat) {
+    body.response_format = { type: "json_object" };
+  }
+  return body;
+}
+
 async function analyzeWithOpenAICompatible(
   base64Image: string,
   config: ActiveProviderConfig,
   prompt: string,
 ): Promise<GeminiAnalysisResponse> {
-  let baseUrl = config.baseUrl;
   let model = config.modelName || "gpt-4o";
+  let baseUrl: string;
+  // Doubao/Ark does not accept `response_format`; other gateways do.
+  let includeResponseFormat = true;
 
   if (config.type === AIProviderType.QWEN) {
-    baseUrl = baseUrl || "https://dashscope.aliyuncs.com/compatible-mode/v1";
+    baseUrl = normalizeBaseUrl(
+      config.baseUrl,
+      "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    );
     model = config.modelName || "qwen-vl-max";
   } else if (config.type === AIProviderType.DOUBAO) {
-    baseUrl = baseUrl || "https://ark.cn-beijing.volces.com/api/v3";
+    baseUrl = normalizeBaseUrl(
+      config.baseUrl,
+      "https://ark.cn-beijing.volces.com/api/v3",
+    );
     if (!config.modelName?.trim()) {
       throw new Error(
         "豆包需要配置推理接入点ID (ep-xxxxxxxxxx)，请在火山引擎 Ark 控制台创建接入点后填写。",
       );
     }
     model = config.modelName.trim();
-  }
-
-  if (!config.apiKey) throw new Error("API Key 未设置");
-
-  let requestBody;
-  if (config.type === AIProviderType.QWEN) {
-    requestBody = {
-      model: model,
-      messages: [
-        { role: "system", content: prompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "请解析这张题目图片，并以 JSON 格式输出。" },
-            { type: "image_url", image_url: { url: base64Image } },
-          ],
-        },
-      ],
-      response_format: { type: "json_object" },
-    };
-  } else if (config.type === AIProviderType.DOUBAO) {
-    const imageUrl = base64Image.startsWith("data:")
-      ? base64Image
-      : `data:image/jpeg;base64,${base64Image}`;
-
-    requestBody = {
-      model: model,
-      messages: [
-        { role: "system", content: prompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "请解析这张题目图片，并以 JSON 格式输出。" },
-            { type: "image_url", image_url: { url: imageUrl } },
-          ],
-        },
-      ],
-    };
+    includeResponseFormat = false;
   } else {
-    requestBody = {
-      model: model,
-      messages: [
-        { role: "system", content: prompt },
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "请解析这张题目图片，并以 JSON 格式输出。" },
-            { type: "image_url", image_url: { url: base64Image } },
-          ],
-        },
-      ],
-      response_format: { type: "json_object" },
-    };
+    baseUrl = normalizeBaseUrl(config.baseUrl, "https://api.openai.com/v1");
   }
 
-  const response = await fetch(`${baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(requestBody),
-  });
+  const isBuiltIn = Object.values(AIProviderType).includes(
+    config.type as AIProviderType,
+  );
+  // Built-in clouds always need a key; self-hosted custom endpoints may not.
+  if (!config.apiKey && isBuiltIn) {
+    throw new Error(
+      `当前使用的服务商（${config.type}）未填写 API Key，请在设置中填写后重试。`,
+    );
+  }
+  if (!baseUrl) throw new Error("接口地址 (Base URL) 未设置");
 
-  if (!response.ok) {
-    let errorMessage = "AI 请求失败";
-    try {
-      const err = await response.json();
-      console.error("AI API Error Response:", err);
-      // Check for specific Doubao/Vision error
-      const rawMsg = err.error?.message || err.message || JSON.stringify(err);
-      if (rawMsg.includes("support text") || rawMsg.includes("MultiContent")) {
-        errorMessage =
-          "该模型似乎不支持图片输入。请确保您在火山引擎/服务商控制台选择了支持视觉(Vision)能力的模型版本。";
-      } else {
-        errorMessage = rawMsg;
-      }
-    } catch (e) {
-      console.error("AI API Error (Text):", await response.text());
-      errorMessage = `HTTP error! status: ${response.status}`;
+  let result = await callChatCompletion(
+    baseUrl,
+    config.apiKey,
+    buildChatRequestBody(base64Image, model, prompt, includeResponseFormat),
+  );
+
+  // Some gateways reject `response_format`; retry once without it.
+  if (!result.ok && includeResponseFormat) {
+    const failure = describeCallFailure(result, baseUrl);
+    if (/response_format|json_object|unsupported|not support/i.test(failure)) {
+      console.warn(
+        "AI provider rejected response_format, retrying without it:",
+        failure,
+      );
+      result = await callChatCompletion(
+        baseUrl,
+        config.apiKey,
+        buildChatRequestBody(base64Image, model, prompt, false),
+      );
     }
-    throw new Error(errorMessage);
   }
 
-  const data = await response.json();
-  const content = data.choices
-    ? data.choices[0].message.content
-    : data.result.response;
+  if (!result.ok) {
+    console.error("AI API Error Response:", result.status, result.rawText);
+    throw new Error(describeCallFailure(result, baseUrl));
+  }
+
+  const content =
+    extractAssistantText(result.payload) ?? extractFromSSE(result.rawText);
+
+  if (!content || !content.trim()) {
+    console.error("AI API returned no assistant text:", result.rawText);
+    const hint = errorMessageFromPayload(result.payload);
+    throw new Error(
+      hint
+        ? `AI 返回错误：${hint}`
+        : `AI 返回内容为空或格式无法识别。原始响应：${snippet(result.rawText)}`,
+    );
+  }
+
   return cleanAndParseJSON(content);
 }
 
@@ -381,7 +593,15 @@ export const testAIConfig = async (
         model = config.modelName || "doubao-1-5-pro-32k-250115";
       }
 
-      if (!config.apiKey) throw new Error("API Key 未设置");
+      const isBuiltIn = Object.values(AIProviderType).includes(
+        config.type as AIProviderType,
+      );
+      // Local / self-hosted gateways need no API key.
+      if (!config.apiKey && isBuiltIn) {
+        throw new Error(
+          `当前测试的服务商（${config.type}）未填写 API Key，请先在配置中填写。`,
+        );
+      }
 
       let requestBody;
       if (config.type === AIProviderType.DOUBAO) {
@@ -401,25 +621,28 @@ export const testAIConfig = async (
         };
       }
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${config.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
+      const result = await callChatCompletion(
+        normalizeBaseUrl(
+          baseUrl,
+          config.type === AIProviderType.QWEN
+            ? "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            : "https://api.openai.com/v1",
+        ),
+        config.apiKey,
+        requestBody,
+      );
 
-      if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.error?.message || "AI 测试请求失败");
+      if (!result.ok) {
+        throw new Error(describeCallFailure(result, baseUrl));
       }
 
-      const data = await response.json();
-      const hasContent = data.choices
-        ? !!data.choices[0]?.message?.content
-        : !!data.result?.response;
-      return hasContent;
+      const content = extractAssistantText(result.payload);
+      if (!content) {
+        throw new Error(
+          `AI 返回内容为空或格式无法识别。原始响应：${snippet(result.rawText)}`,
+        );
+      }
+      return true;
     }
   } catch (e) {
     console.error("AI Config Test Failed:", e);
@@ -458,6 +681,10 @@ export const analyzeQuestionImage = async (
     }
   } catch (e) {
     console.error("AI Analysis Failed:", e);
-    throw new Error("识别失败，请检查 AI 配置或图片清晰度。");
+    const message =
+      e instanceof Error && e.message ? e.message : "未知错误";
+    // Keep the provider's actual message so the user can act on it
+    // (e.g. 余额不足 / 模型不支持图片) instead of a generic hint.
+    throw new Error(`识别失败：${message}`);
   }
 };

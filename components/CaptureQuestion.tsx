@@ -15,9 +15,11 @@ interface BatchItem {
 interface CaptureQuestionProps {
   onQuestionSaved: (question: Omit<Question, 'id' | 'createdAt'>) => Promise<void>;
   onCancel: () => void;
+  /** Active AI provider label, shown so users can confirm which engine is used. */
+  providerLabel?: string;
 }
 
-const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCancel }) => {
+const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCancel, providerLabel }) => {
   const [items, setItems] = useState<BatchItem[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
@@ -235,7 +237,7 @@ const CaptureQuestion: React.FC<CaptureQuestionProps> = ({ onQuestionSaved, onCa
         <div className="px-4 py-4 md:px-8 md:py-5 border-b flex justify-between items-center bg-slate-50">
           <div>
             <h2 className="text-xl font-bold text-slate-800">批量录入错题</h2>
-            <p className="text-xs text-slate-500 mt-0.5">支持多选照片，Gemini 将为您逐一解析</p>
+            <p className="text-xs text-slate-500 mt-0.5">支持多选照片，{providerLabel || 'AI'} 将为您逐一解析</p>
           </div>
           <button 
             onClick={onCancel} 

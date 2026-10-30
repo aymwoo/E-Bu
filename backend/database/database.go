@@ -240,16 +240,28 @@ func (db *DB) HardDeleteQuestion(id string) error {
 // AI Config operations
 func (db *DB) GetAIConfig() (*models.AIConfig, error) {
 	var config models.AIConfig
-	result := db.First(&config)
-	return &config, result.Error
+	err := db.First(&config).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// A missing row is a normal state (fresh install), not an error:
+		// returning 500 here made the frontend silently fall back to defaults.
+		config = models.AIConfig{Type: models.Gemini}
+		if createErr := db.Create(&config).Error; createErr != nil {
+			return &config, createErr
+		}
+		return &config, nil
+	}
+	return &config, err
 }
 
 func (db *DB) SaveAIConfig(config *models.AIConfig) error {
 	var existingConfig models.AIConfig
-	result := db.First(&existingConfig)
-	if result.Error != nil {
-		// If no config exists, create new one
-		return db.Create(config).Error
+	err := db.First(&existingConfig).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// If no config exists, create new one
+			return db.Create(config).Error
+		}
+		return err
 	}
 	// Update existing config
 	return db.Model(&existingConfig).Updates(config).Error
